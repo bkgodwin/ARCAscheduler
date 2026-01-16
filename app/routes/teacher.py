@@ -201,6 +201,7 @@ def api_teacher_update_course_description():
 
     courses = read_courses()
     found = False
+    updated_course = None
     for c in courses:
         if (c.get("course_code") or "").strip() == course_code:
             # check ownership
