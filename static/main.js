@@ -1,34 +1,24 @@
-// static/main.js
-//
-// Full client-side script for ARCAscheduler
-// - student: select-based name suggestions, schedule editing, save
-// - teacher: login, roster (only assigned courses), approve/reject, inline edit course description (100-word limit)
-// - counselor: login, pagination (per-page selectable, default 50), filters, export / PDF of schedule cards (selected or all in view)
-// Requires server endpoints already present in the repo (api/teacher/*, api/student/*, api/counselor/*, api/printables/*)
+function show(el) { if (!el) return; el.style.display = ""; }
+function hide(el) { if (!el) return; el.style.display = "none"; }
+function html(el, s) { if (!el) return; el.innerHTML = s; }
+function text(el, t) { if (!el) return; el.textContent = t; }
 
-//
-// Helpers
-//
-function show(el){ if(!el) return; el.style.display = ""; }
-function hide(el){ if(!el) return; el.style.display = "none"; }
-function html(el, s){ if(!el) return; el.innerHTML = s; }
-function text(el, t){ if(!el) return; el.textContent = t; }
-
-function escapeHTML(str){
-  return (str||"").replace(/&/g,"&amp;")
-                  .replace(/</g,"&lt;")
-                  .replace(/>/g,"&gt;")
-                  .replace(/"/g,"&quot;");
+function escapeHTML(str) {
+  return (str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
-function extractCodeFromDisplay(s){
-  if(!s) return "";
+function extractCodeFromDisplay(s) {
+  if (!s) return "";
   const m = s.match(/\(([^()]+)\)\s*$/);
-  if(m) return m[1].trim();
+  if (m) return m[1].trim();
   return s.trim();
 }
 
-function subjectToStyle(subjRaw, subjectColorsMap){
+function subjectToStyle(subjRaw, subjectColorsMap) {
   let subj = subjRaw && subjRaw.trim() ? subjRaw.trim() : "Other";
   if (subjectColorsMap && subjectColorsMap[subj]) {
     return `background:${subjectColorsMap[subj]};`;
@@ -37,39 +27,42 @@ function subjectToStyle(subjRaw, subjectColorsMap){
   return `background:${fallback};`;
 }
 
-function approvalClass(item){
-  // item: {requires_approval, approval_status}
-  if(!item || !item.requires_approval) return "";
+function approvalClass(item) {
+  if (!item || !item.requires_approval) return "";
   const st = (item.approval_status || "pending").toLowerCase();
-  if(st === "approved") return "approvalApproved";
-  if(st === "rejected") return "approvalRejected";
+  if (st === "approved") return "approvalApproved";
+  if (st === "rejected") return "approvalRejected";
   return "approvalPending";
 }
 
-function approvalLabel(item){
-  if(!item || !item.requires_approval) return "";
+function approvalLabel(item) {
+  if (!item || !item.requires_approval) return "";
   const st = (item.approval_status || "pending").toLowerCase();
-  if(st === "approved") return `<span class="approvalTag tagApproved">APPROVED</span>`;
-  if(st === "rejected") return `<span class="approvalTag tagRejected">REJECTED</span>`;
+  if (st === "approved") return `<span class="approvalTag tagApproved">APPROVED</span>`;
+  if (st === "rejected") return `<span class="approvalTag tagRejected">REJECTED</span>`;
   return `<span class="approvalTag tagPending">PENDING</span>`;
 }
 
-function moveItemUp(arr, idx){
-  if(idx<=0) return;
-  const tmp = arr[idx-1];
-  arr[idx-1] = arr[idx];
+function moveItemUp(arr, idx) {
+  if (idx <= 0) return;
+  const tmp = arr[idx - 1];
+  arr[idx - 1] = arr[idx];
   arr[idx] = tmp;
 }
-function moveItemDown(arr, idx){
-  if(idx>=arr.length-1) return;
-  const tmp = arr[idx+1];
-  arr[idx+1] = arr[idx];
+function moveItemDown(arr, idx) {
+  if (idx >= arr.length - 1) return;
+  const tmp = arr[idx + 1];
+  arr[idx + 1] = arr[idx];
   arr[idx] = tmp;
 }
 
-//
-// DOM elements
-//
+// word count helper
+function countWords(s) {
+  if (!s) return 0;
+  return s.trim().split(/\s+/).filter(Boolean).length;
+}
+
+// -------------------- DOM references --------------------
 const studentModeBtn = document.getElementById("studentModeBtn");
 const teacherModeBtn = document.getElementById("teacherModeBtn");
 const counselorModeBtn = document.getElementById("counselorModeBtn");
@@ -78,12 +71,10 @@ const studentPanel = document.getElementById("studentPanel");
 const teacherPanel = document.getElementById("teacherPanel");
 const counselorPanel = document.getElementById("counselorPanel");
 
-//
-// Student elements
-//
+// Student
 const studentLoginArea = document.getElementById("studentLoginArea");
 const studentNameInput = document.getElementById("studentNameInput");
-const studentNameDropdown = document.getElementById("studentNameDropdown"); // now a <select>
+const studentNameDropdown = document.getElementById("studentNameDropdown"); // <select>
 const studentIdCheckInput = document.getElementById("studentIdCheckInput");
 const studentLoginBtn = document.getElementById("studentLoginBtn");
 const studentLoginMsg = document.getElementById("studentLoginMsg");
@@ -106,9 +97,7 @@ const studentAvailableCourses = document.getElementById("studentAvailableCourses
 const maxAcademicSpan = document.getElementById("maxAcademicSpan");
 const maxElectiveSpan = document.getElementById("maxElectiveSpan");
 
-//
-// Teacher elements
-//
+// Teacher
 const teacherLoginArea = document.getElementById("teacherLoginArea");
 const teacherDashboard = document.getElementById("teacherDashboard");
 const teacherEmailInput = document.getElementById("teacherEmailInput");
@@ -119,9 +108,7 @@ const teacherLogoutBtn = document.getElementById("teacherLogoutBtn");
 const teacherInfo = document.getElementById("teacherInfo");
 const teacherRosters = document.getElementById("teacherRosters");
 
-//
-// Counselor elements
-//
+// Counselor
 const counselorLoginArea = document.getElementById("counselorLoginArea");
 const counselorDashboard = document.getElementById("counselorDashboard");
 const counselorPassInput = document.getElementById("counselorPassInput");
@@ -138,13 +125,13 @@ const saveSubjectColorsBtn = document.getElementById("saveSubjectColorsBtn");
 const colorSaveMsg = document.getElementById("colorSaveMsg");
 
 const studentsCsvInput = document.getElementById("studentsCsvInput");
-const coursesCsvInput  = document.getElementById("coursesCsvInput");
+const coursesCsvInput = document.getElementById("coursesCsvInput");
 const teachersCsvInput = document.getElementById("teachersCsvInput");
-const uploadCsvBtn     = document.getElementById("uploadCsvBtn");
+const uploadCsvBtn = document.getElementById("uploadCsvBtn");
 const uploadMsg = document.getElementById("uploadMsg");
 
-const filterName   = document.getElementById("filterName");
-const filterGrade  = document.getElementById("filterGrade");
+const filterName = document.getElementById("filterName");
+const filterGrade = document.getElementById("filterGrade");
 const filterCourse = document.getElementById("filterCourse");
 const applyFiltersBtn = document.getElementById("applyFiltersBtn");
 const exportFilteredBtn = document.getElementById("exportFilteredBtn");
@@ -159,7 +146,9 @@ const rosterPrintBtn = document.getElementById("rosterPrintBtn");
 const pendingApprovalCount = document.getElementById("pendingApprovalCount");
 const pendingApprovalsList = document.getElementById("pendingApprovalsList");
 
-const editScheduleArea = document.getElementById("editScheduleArea");
+// Counselor modal elements (must match template)
+const editScheduleModal = document.getElementById("editScheduleModal");
+const editModalCloseBtn = document.getElementById("editModalCloseBtn");
 const editScheduleInfo = document.getElementById("editScheduleInfo");
 const cSelectedAcademicList = document.getElementById("cSelectedAcademicList");
 const cSelectedElectiveList = document.getElementById("cSelectedElectiveList");
@@ -168,12 +157,10 @@ const saveCounselorScheduleBtn = document.getElementById("saveCounselorScheduleB
 const resetScheduleBtn = document.getElementById("resetScheduleBtn");
 const deleteStudentBtn = document.getElementById("deleteStudentBtn");
 const editScheduleMsg = document.getElementById("editScheduleMsg");
-
 const cFilterSubject = document.getElementById("cFilterSubject");
 const cFilterNameSearch = document.getElementById("cFilterNameSearch");
 const cRunCourseSearchBtn = document.getElementById("cRunCourseSearchBtn");
 const cAvailableCoursesGrid = document.getElementById("cAvailableCoursesGrid");
-
 const cMaxAcademicSpan = document.getElementById("cMaxAcademicSpan");
 const cMaxElectiveSpan = document.getElementById("cMaxElectiveSpan");
 
@@ -182,21 +169,16 @@ const pagePrevBtn = document.getElementById("pagePrevBtn");
 const pageNextBtn = document.getElementById("pageNextBtn");
 const pageInfo = document.getElementById("pageInfo");
 
-//
-// Constants
-//
+// -------------------- Constants & State --------------------
 if (maxAcademicSpan) maxAcademicSpan.textContent = MAX_ACADEMIC_COURSES;
 if (maxElectiveSpan) maxElectiveSpan.textContent = MAX_ELECTIVE_CHOICES;
 if (cMaxAcademicSpan) cMaxAcademicSpan.textContent = MAX_ACADEMIC_COURSES;
 if (cMaxElectiveSpan) cMaxElectiveSpan.textContent = MAX_ELECTIVE_CHOICES;
 
-//
-// State
-//
 let subjectColors = {};
 let currentStudentInfo = null;
 
-let studentAcademic = []; // items: {display, course_code, subject_area, requires_approval, approval_status}
+let studentAcademic = [];
 let studentElective = [];
 let studentSpecial = "";
 
@@ -209,42 +191,27 @@ let counselorElectiveItems = [];
 let lastStudentCourseSearch = [];
 let lastCounselorCourseSearch = [];
 
-// counselor pagination state
 let counselorPage = 1;
 let counselorPerPage = 50;
 let counselorTotal = 0;
 
-//
-// Mode switching
-//
-function showOnly(panel){
+// -------------------- Mode switching --------------------
+function showOnly(panel) {
   hide(studentPanel);
   hide(teacherPanel);
   hide(counselorPanel);
   show(panel);
 }
 
-studentModeBtn && studentModeBtn.addEventListener("click", async ()=>{
-  showOnly(studentPanel);
-});
+studentModeBtn && studentModeBtn.addEventListener("click", async () => { showOnly(studentPanel); });
+teacherModeBtn && teacherModeBtn.addEventListener("click", async () => { showOnly(teacherPanel); await loadTeacherState(); });
+counselorModeBtn && counselorModeBtn.addEventListener("click", async () => { showOnly(counselorPanel); await loadCounselorState(); });
 
-teacherModeBtn && teacherModeBtn.addEventListener("click", async ()=>{
-  showOnly(teacherPanel);
-  await loadTeacherState();
-});
-
-counselorModeBtn && counselorModeBtn.addEventListener("click", async ()=>{
-  showOnly(counselorPanel);
-  await loadCounselorState();
-});
-
-//
-// Load subject colors (used for styling course chips)
-//
-async function loadSubjectColors(){
+// -------------------- Utilities --------------------
+async function loadSubjectColors() {
   try {
     const r = await fetch("/api/counselor/settings");
-    if(!r.ok) return;
+    if (!r.ok) return;
     const d = await r.json();
     subjectColors = d.subject_colors || {};
   } catch (e) {
@@ -252,40 +219,22 @@ async function loadSubjectColors(){
   }
 }
 
-//
-// STUDENT: autocomplete (select), login, schedule
-//
+// -------------------- Student: select autocomplete, login, schedule --------------------
 if (studentNameInput) {
-  studentNameInput.addEventListener("input", async ()=>{
+  studentNameInput.addEventListener("input", async () => {
     const q = studentNameInput.value.trim();
-    if(q.length < 2){
-      if(studentNameDropdown) {
-        studentNameDropdown.style.display = "none";
-        studentNameDropdown.innerHTML = "";
-      }
+    if (q.length < 2) {
+      if (studentNameDropdown) { studentNameDropdown.style.display = "none"; studentNameDropdown.innerHTML = ""; }
       return;
     }
     try {
       const r = await fetch(`/api/student/find?q=${encodeURIComponent(q)}`);
-      if(!r.ok){
-        if(studentNameDropdown) {
-          studentNameDropdown.style.display = "none";
-          studentNameDropdown.innerHTML = "";
-        }
-        return;
-      }
+      if (!r.ok) { if (studentNameDropdown) { studentNameDropdown.style.display = "none"; studentNameDropdown.innerHTML = ""; } return; }
       const d = await r.json();
-      if(!d.matches || d.matches.length===0){
-        if(studentNameDropdown) {
-          studentNameDropdown.style.display = "none";
-          studentNameDropdown.innerHTML = "";
-        }
-        return;
-      }
-
-      if(studentNameDropdown){
+      if (!d.matches || d.matches.length === 0) { if (studentNameDropdown) { studentNameDropdown.style.display = "none"; studentNameDropdown.innerHTML = ""; } return; }
+      if (studentNameDropdown) {
         studentNameDropdown.innerHTML = "";
-        d.matches.forEach(m=>{
+        d.matches.forEach(m => {
           const opt = document.createElement("option");
           opt.value = m.student_id;
           opt.textContent = `${m.student_name} (Grade ${m.grade_level})`;
@@ -297,38 +246,34 @@ if (studentNameInput) {
       }
     } catch (err) {
       console.error("Error fetching student suggestions:", err);
-      if(studentNameDropdown){
-        studentNameDropdown.style.display = "none";
-        studentNameDropdown.innerHTML = "";
-      }
+      if (studentNameDropdown) { studentNameDropdown.style.display = "none"; studentNameDropdown.innerHTML = ""; }
     }
   });
 
-  // choose selected option
-  studentNameDropdown && studentNameDropdown.addEventListener("change", ()=>{
+  studentNameDropdown && studentNameDropdown.addEventListener("change", () => {
     const opt = studentNameDropdown.selectedOptions[0];
-    if(!opt) return;
+    if (!opt) return;
     studentNameInput.value = opt.dataset.name || opt.textContent || "";
     studentNameInput.dataset.studentId = opt.value || "";
     studentNameDropdown.style.display = "none";
   });
 }
 
-studentLoginBtn && studentLoginBtn.addEventListener("click", async ()=>{
+studentLoginBtn && studentLoginBtn.addEventListener("click", async () => {
   const sid = studentNameInput.dataset.studentId || "";
   const check = studentIdCheckInput.value.trim();
-  if(!sid || !check){
+  if (!sid || !check) {
     studentLoginMsg.textContent = "Select your name and enter your ID.";
     return;
   }
   try {
-    const r = await fetch("/api/student/login",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({student_id:sid, id_check:check})
+    const r = await fetch("/api/student/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ student_id: sid, id_check: check })
     });
     const d = await r.json();
-    if(!d.ok){
+    if (!d.ok) {
       studentLoginMsg.textContent = d.error || "Login failed.";
       return;
     }
@@ -339,81 +284,63 @@ studentLoginBtn && studentLoginBtn.addEventListener("click", async ()=>{
   }
 });
 
-studentSignOutBtn && studentSignOutBtn.addEventListener("click", async ()=>{
-  await fetch("/api/student/logout", {method:"POST"});
-  currentStudentInfo = null;
-  studentAcademic = [];
-  studentElective = [];
-  studentSpecial = "";
-  if(studentNameInput) {
-    studentNameInput.value = "";
-    studentNameInput.dataset.studentId = "";
-  }
-  if(studentIdCheckInput) studentIdCheckInput.value = "";
-  if(studentLoginMsg) studentLoginMsg.textContent = "";
-  hide(studentScheduleArea);
-  show(studentLoginArea);
+studentSignOutBtn && studentSignOutBtn.addEventListener("click", async () => {
+  await fetch("/api/student/logout", { method: "POST" });
+  currentStudentInfo = null; studentAcademic = []; studentElective = []; studentSpecial = "";
+  if (studentNameInput) { studentNameInput.value = ""; studentNameInput.dataset.studentId = ""; }
+  if (studentIdCheckInput) studentIdCheckInput.value = "";
+  if (studentLoginMsg) studentLoginMsg.textContent = "";
+  hide(studentScheduleArea); show(studentLoginArea);
 });
 
-async function loadStudentStatus(){
+async function loadStudentStatus() {
   await loadSubjectColors();
-
   const r = await fetch("/api/student/status");
   const d = await r.json();
-  if(!d.authed){
-    studentLoginMsg.textContent = "Not authenticated.";
-    return;
-  }
+  if (!d.authed) { studentLoginMsg.textContent = "Not authenticated."; return; }
   currentStudentInfo = d.student;
   studentAcademic = (d.schedule_items && d.schedule_items.academic) ? d.schedule_items.academic : [];
   studentElective = (d.schedule_items && d.schedule_items.elective) ? d.schedule_items.elective : [];
   studentSpecial = (d.schedule && d.schedule.special_instructions) ? d.schedule.special_instructions : "";
 
   const canSubmit = d.can_submit;
-
   studentInfoBlock.innerHTML = `
     <div><strong>${escapeHTML(currentStudentInfo.student_name)}</strong></div>
     <div>ID: ${escapeHTML(currentStudentInfo.student_id)}</div>
     <div>Grade: ${escapeHTML(currentStudentInfo.grade_level)}</div>
     <div>Submit allowed: ${canSubmit ? "Yes" : "Locked by counselor"}</div>
   `;
-
   specialInstructionsInput.value = studentSpecial;
   studentCardLink.href = `/schedule_card/${encodeURIComponent(currentStudentInfo.student_id)}`;
 
   renderSelectedStudentLists();
-  hide(studentLoginArea);
-  show(studentScheduleArea);
+  hide(studentLoginArea); show(studentScheduleArea);
   await runStudentCourseSearch();
 }
 
-function renderSelectedStudentLists(){
+function renderSelectedStudentLists() {
   renderSelectedList(selectedAcademicList, studentAcademic, true);
   renderSelectedList(selectedElectiveList, studentElective, false);
 }
 
-function renderSelectedList(container, items, isAcademic){
+function renderSelectedList(container, items, isAcademic) {
+  if (!container) return;
   let out = "";
-  items.forEach((it, idx)=>{
+  items.forEach((it, idx) => {
     const style = subjectToStyle(it.subject_area, subjectColors);
     const cls = approvalClass(it);
-
-    if(isAcademic){
+    if (isAcademic) {
       out += `
         <div class="selectedRow ${cls}">
-          <span class="courseChip" style="${style}">
-            ${escapeHTML(it.display)} ${approvalLabel(it)}
-          </span>
+          <span class="courseChip" style="${style}">${escapeHTML(it.display)} ${approvalLabel(it)}</span>
           <button class="smallBtn removeBtn" data-idx="${idx}" data-type="acad">Remove</button>
         </div>
       `;
     } else {
       out += `
         <div class="selectedRow ${cls}">
-          <span class="priorityNum">#${idx+1}</span>
-          <span class="courseChip" style="${style}">
-            ${escapeHTML(it.display)} ${approvalLabel(it)}
-          </span>
+          <span class="priorityNum">#${idx + 1}</span>
+          <span class="courseChip" style="${style}">${escapeHTML(it.display)} ${approvalLabel(it)}</span>
           <div class="electiveBtns">
             <button class="smallBtn upBtn" data-idx="${idx}">▲</button>
             <button class="smallBtn downBtn" data-idx="${idx}">▼</button>
@@ -423,90 +350,50 @@ function renderSelectedList(container, items, isAcademic){
       `;
     }
   });
-
-  if(items.length === 0){
-    out = `<div class="dimtext">(none selected)</div>`;
-  }
-
+  if (items.length === 0) out = `<div class="dimtext">(none selected)</div>`;
   container.innerHTML = out;
 
-  container.querySelectorAll(".removeBtn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
+  container.querySelectorAll(".removeBtn").forEach(btn => {
+    btn.addEventListener("click", () => {
       const idx = parseInt(btn.dataset.idx);
       const type = btn.dataset.type;
-      if(type === "acad"){
-        studentAcademic.splice(idx,1);
-      } else {
-        studentElective.splice(idx,1);
-      }
+      if (type === "acad") studentAcademic.splice(idx, 1);
+      else studentElective.splice(idx, 1);
       renderSelectedStudentLists();
     });
   });
-
-  container.querySelectorAll(".upBtn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const idx = parseInt(btn.dataset.idx);
-      moveItemUp(studentElective, idx);
-      renderSelectedStudentLists();
-    });
-  });
-
-  container.querySelectorAll(".downBtn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const idx = parseInt(btn.dataset.idx);
-      moveItemDown(studentElective, idx);
-      renderSelectedStudentLists();
-    });
-  });
+  container.querySelectorAll(".upBtn").forEach(btn => { btn.addEventListener("click", () => { moveItemUp(studentElective, parseInt(btn.dataset.idx)); renderSelectedStudentLists(); }); });
+  container.querySelectorAll(".downBtn").forEach(btn => { btn.addEventListener("click", () => { moveItemDown(studentElective, parseInt(btn.dataset.idx)); renderSelectedStudentLists(); }); });
 }
 
 studentRunCourseSearchBtn && studentRunCourseSearchBtn.addEventListener("click", runStudentCourseSearch);
-
-async function runStudentCourseSearch(){
-  if(!currentStudentInfo) return;
-
+async function runStudentCourseSearch() {
+  if (!currentStudentInfo) return;
   const params = new URLSearchParams();
   params.set("grade", currentStudentInfo.grade_level);
-  if(studentFilterSubject && studentFilterSubject.value.trim()){
-    params.set("subject", studentFilterSubject.value.trim());
-  }
-  if(studentFilterName && studentFilterName.value.trim()){
-    params.set("name", studentFilterName.value.trim());
-  }
-
+  if (studentFilterSubject && studentFilterSubject.value.trim()) params.set("subject", studentFilterSubject.value.trim());
+  if (studentFilterName && studentFilterName.value.trim()) params.set("name", studentFilterName.value.trim());
   try {
     const r = await fetch(`/api/courses?${params.toString()}`);
     const d = await r.json();
     lastStudentCourseSearch = d.courses || [];
-
     let out = "";
-    lastStudentCourseSearch.forEach(c=>{
-      out += renderCourseCard(c);
-    });
-    studentAvailableCourses.innerHTML = out;
-
-    studentAvailableCourses.querySelectorAll(".addCourseBtn").forEach(btn=>{
-      btn.addEventListener("click", ()=>{
+    lastStudentCourseSearch.forEach(c => { out += renderCourseCard(c); });
+    if (studentAvailableCourses) studentAvailableCourses.innerHTML = out;
+    if (studentAvailableCourses) studentAvailableCourses.querySelectorAll(".addCourseBtn").forEach(btn => {
+      btn.addEventListener("click", () => {
         const code = btn.dataset.code;
-        const found = lastStudentCourseSearch.find(x=>x.course_code === code);
-        if(!found) return;
-
+        const found = lastStudentCourseSearch.find(x => x.course_code === code);
+        if (!found) return;
         const display = `${found.course_name} (${found.course_code})`;
-        const item = {
-          display,
-          course_code: found.course_code,
-          subject_area: found.subject_area || "Other",
-          requires_approval: !!found.requires_approval,
-          approval_status: found.requires_approval ? "pending" : "approved"
-        };
-
+        const item = { display, course_code: found.course_code, subject_area: found.subject_area || "Other", requires_approval: !!found.requires_approval, approval_status: found.requires_approval ? "pending" : "approved" };
         const isElective = (found.subject_area || "").toLowerCase().includes("cte") || (found.subject_area || "").toLowerCase().includes("elective");
-        if(isElective){
-          if(studentElective.length >= MAX_ELECTIVE_CHOICES) return;
-          if(!studentElective.find(x=>x.course_code===item.course_code)) studentElective.push(item);
+        if (isElective) {
+          if (studentElective.length >= MAX_ELECTIVE_CHOICES) return;
+          if (!studentElective.find(x => x.course_code === item.course_code)) studentElective.push(item);
         } else {
-          if(studentAcademic.length >= MAX_ACADEMIC_COURSES) return;
-          if(!studentAcademic.find(x=>x.course_code===item.course_code)) studentAcademic.push(item);
+          if (studentAcademic.length >= MAX_ACADEMIC_COURSES) return;
+          if (!studentAcademic.find(x => x.course_code === item.course_code)) studentAcademic.push(item);
         }
         renderSelectedStudentLists();
       });
@@ -516,7 +403,7 @@ async function runStudentCourseSearch(){
   }
 }
 
-function renderCourseCard(c){
+function renderCourseCard(c) {
   const style = subjectToStyle(c.subject_area || "Other", subjectColors);
   const approvalNote = c.requires_approval ? `<span class="approvalTag tagPending">Requires Approval</span>` : "";
   return `
@@ -548,25 +435,15 @@ function renderCourseCard(c){
   `;
 }
 
-studentSaveBtn && studentSaveBtn.addEventListener("click", async ()=>{
-  if(!currentStudentInfo) return;
-
-  const payload = {
-    academic_courses: studentAcademic.map(x=>x.display),
-    elective_courses: studentElective.map(x=>x.display),
-    special_instructions: specialInstructionsInput.value.trim()
-  };
-
+studentSaveBtn && studentSaveBtn.addEventListener("click", async () => {
+  if (!currentStudentInfo) return;
+  const payload = { academic_courses: studentAcademic.map(x => x.display), elective_courses: studentElective.map(x => x.display), special_instructions: specialInstructionsInput.value.trim() };
   try {
-    const r = await fetch("/api/student/save_schedule",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify(payload)
-    });
+    const r = await fetch("/api/student/save_schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const d = await r.json();
-    if(d.ok){
+    if (d.ok) {
       studentSaveMsg.textContent = "Saved! Approval-required courses will show PENDING until a teacher approves.";
-      await loadStudentStatus(); // refresh statuses
+      await loadStudentStatus();
     } else {
       studentSaveMsg.textContent = d.error || "Error saving schedule.";
     }
@@ -576,78 +453,42 @@ studentSaveBtn && studentSaveBtn.addEventListener("click", async ()=>{
   }
 });
 
-//
-// TEACHER: login, roster and inline description edit
-//
-teacherLoginBtn && teacherLoginBtn.addEventListener("click", async ()=>{
+// -------------------- Teacher: login, roster, approvals, edit description --------------------
+teacherLoginBtn && teacherLoginBtn.addEventListener("click", async () => {
   const email = teacherEmailInput.value.trim();
   const pw = teacherPasswordInput.value.trim();
-  if(!email || !pw){
-    teacherLoginMsg.textContent = "Enter email and password.";
-    return;
-  }
+  if (!email || !pw) { teacherLoginMsg.textContent = "Enter email and password."; return; }
   try {
-    const r = await fetch("/api/teacher/login",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({email, password: pw})
-    });
+    const r = await fetch("/api/teacher/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pw }) });
     const d = await r.json();
-    if(d.ok){
-      teacherLoginMsg.textContent = "";
-      await loadTeacherState();
-    } else {
-      teacherLoginMsg.textContent = d.error || "Login failed.";
-    }
-  } catch (err) {
-    console.error("Teacher login error", err);
-    teacherLoginMsg.textContent = "Network error.";
-  }
+    if (d.ok) { teacherLoginMsg.textContent = ""; await loadTeacherState(); } else { teacherLoginMsg.textContent = d.error || "Login failed."; }
+  } catch (err) { console.error("Teacher login error", err); teacherLoginMsg.textContent = "Network error."; }
 });
 
-teacherLogoutBtn && teacherLogoutBtn.addEventListener("click", async ()=>{
-  await fetch("/api/teacher/logout", {method:"POST"});
+teacherLogoutBtn && teacherLogoutBtn.addEventListener("click", async () => {
+  await fetch("/api/teacher/logout", { method: "POST" });
   await loadTeacherState();
 });
 
-async function loadTeacherState(){
+async function loadTeacherState() {
   await loadSubjectColors();
-
   const r = await fetch("/api/teacher/status");
   const d = await r.json();
-  if(!d.authed){
-    show(teacherLoginArea);
-    hide(teacherDashboard);
-    return;
-  }
-
-  hide(teacherLoginArea);
-  show(teacherDashboard);
-
-  teacherInfo.innerHTML = `
-    <div><strong>${escapeHTML(d.teacher.teacher_name || "")}</strong></div>
-    <div class="dimtext">${escapeHTML(d.teacher.teacher_email || "")}</div>
-  `;
-
+  if (!d.authed) { show(teacherLoginArea); hide(teacherDashboard); return; }
+  hide(teacherLoginArea); show(teacherDashboard);
+  teacherInfo.innerHTML = `<div><strong>${escapeHTML(d.teacher.teacher_name || "")}</strong></div><div class="dimtext">${escapeHTML(d.teacher.teacher_email || "")}</div>`;
   await loadTeacherRoster();
 }
 
-async function loadTeacherRoster(){
+async function loadTeacherRoster() {
   const r = await fetch("/api/teacher/roster");
-  if(!r.ok){
-    teacherRosters.innerHTML = `<div class="msg">Unable to load roster.</div>`;
-    return;
-  }
+  if (!r.ok) { teacherRosters.innerHTML = `<div class="msg">Unable to load roster.</div>`; return; }
   const d = await r.json();
   const blocks = d.courses || [];
-
-  if(blocks.length === 0){
-    teacherRosters.innerHTML = `<div class="infoBlock">No courses assigned to your email in courses.csv.</div>`;
-    return;
-  }
+  if (blocks.length === 0) { teacherRosters.innerHTML = `<div class="infoBlock">No courses assigned to your email in courses.csv.</div>`; return; }
 
   let out = "";
-  blocks.forEach(b=>{
+  blocks.forEach(b => {
     const c = b.course;
     const style = subjectToStyle(c.subject_area || "Other", subjectColors);
     out += `
@@ -675,42 +516,31 @@ async function loadTeacherRoster(){
 
   teacherRosters.innerHTML = out;
 
-  // wire approval buttons
-  teacherRosters.querySelectorAll(".teacherApproveBtn").forEach(btn=>{
-    btn.addEventListener("click", async ()=>{
-      await teacherSetApproval(btn.dataset.sid, btn.dataset.code, "approved");
-    });
+  teacherRosters.querySelectorAll(".teacherApproveBtn").forEach(btn => {
+    btn.addEventListener("click", async () => { await teacherSetApproval(btn.dataset.sid, btn.dataset.code, "approved"); });
   });
-  teacherRosters.querySelectorAll(".teacherRejectBtn").forEach(btn=>{
-    btn.addEventListener("click", async ()=>{
-      await teacherSetApproval(btn.dataset.sid, btn.dataset.code, "rejected");
-    });
+  teacherRosters.querySelectorAll(".teacherRejectBtn").forEach(btn => {
+    btn.addEventListener("click", async () => { await teacherSetApproval(btn.dataset.sid, btn.dataset.code, "rejected"); });
   });
 
-  // wire edit-description buttons for each course block
-  teacherRosters.querySelectorAll(".edit-course-desc").forEach(btn=>{
-    btn.addEventListener("click", (ev)=>{
+  teacherRosters.querySelectorAll(".edit-course-desc").forEach(btn => {
+    btn.addEventListener("click", () => {
       const courseBlock = btn.closest(".teacherCourseBlock");
-      if(!courseBlock) return;
+      if (!courseBlock) return;
       openDescriptionEditorForBlock(courseBlock);
     });
   });
 }
 
-function renderTeacherStudentTable(course, students){
-  if(students.length === 0){
-    return `<div class="infoBlock">No students have this course on their schedule yet.</div>`;
-  }
-
+function renderTeacherStudentTable(course, students) {
+  if (!students || students.length === 0) return `<div class="infoBlock">No students have this course on their schedule yet.</div>`;
   let rows = "";
-  students.forEach(s=>{
+  students.forEach(s => {
     const st = (s.approval_status || "pending").toLowerCase();
     let tag = `<span class="approvalTag tagPending">PENDING</span>`;
-    if(st === "approved") tag = `<span class="approvalTag tagApproved">APPROVED</span>`;
-    if(st === "rejected") tag = `<span class="approvalTag tagRejected">REJECTED</span>`;
-
+    if (st === "approved") tag = `<span class="approvalTag tagApproved">APPROVED</span>`;
+    if (st === "rejected") tag = `<span class="approvalTag tagRejected">REJECTED</span>`;
     const showButtons = !!course.requires_approval;
-
     rows += `
       <tr>
         <td>${escapeHTML(s.student_name)}</td>
@@ -726,50 +556,22 @@ function renderTeacherStudentTable(course, students){
       </tr>
     `;
   });
-
-  return `
-    <table class="simpleTable">
-      <thead>
-        <tr>
-          <th>Student</th>
-          <th>ID</th>
-          <th>Grade</th>
-          <th>Status</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
+  return `<table class="simpleTable"><thead><tr><th>Student</th><th>ID</th><th>Grade</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-async function teacherSetApproval(student_id, course_code, status){
-  const r = await fetch("/api/teacher/set_approval",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({student_id, course_code, status})
-  });
+async function teacherSetApproval(student_id, course_code, status) {
+  const r = await fetch("/api/teacher/set_approval", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student_id, course_code, status }) });
   const d = await r.json();
-  if(d.ok){
-    await loadTeacherRoster();
-  }
+  if (d.ok) await loadTeacherRoster();
 }
 
-// Teacher description editor utilities
-function countWords(s){
-  if(!s) return 0;
-  return s.trim().split(/\s+/).filter(Boolean).length;
-}
-
-function openDescriptionEditorForBlock(courseBlock){
+// Inline course description editor
+function openDescriptionEditorForBlock(courseBlock) {
   const courseCode = courseBlock.dataset.courseCode || courseBlock.getAttribute("data-course-code");
   const descEl = courseBlock.querySelector(".course-description");
   const currentText = descEl ? descEl.textContent.trim() : "";
-
-  // prevent duplicate editors
-  if(courseBlock.querySelector(".description-editor")) return;
-
-  if(descEl) descEl.style.display = "none";
+  if (courseBlock.querySelector(".description-editor")) return;
+  if (descEl) descEl.style.display = "none";
 
   const editor = document.createElement("div");
   editor.className = "description-editor";
@@ -800,650 +602,355 @@ function openDescriptionEditorForBlock(courseBlock){
 
   controls.appendChild(saveBtn);
   controls.appendChild(cancelBtn);
-
   editor.appendChild(textarea);
   editor.appendChild(counter);
   editor.appendChild(controls);
 
-  textarea.addEventListener("input", ()=>{
-    counter.textContent = `Words: ${countWords(textarea.value)} / 100`;
-  });
+  textarea.addEventListener("input", () => { counter.textContent = `Words: ${countWords(textarea.value)} / 100`; });
 
-  cancelBtn.addEventListener("click", ()=>{
-    editor.remove();
-    if(descEl) descEl.style.display = "";
-  });
+  cancelBtn.addEventListener("click", () => { editor.remove(); if (descEl) descEl.style.display = ""; });
 
-  saveBtn.addEventListener("click", async ()=>{
+  saveBtn.addEventListener("click", async () => {
     const newDesc = textarea.value.trim();
     const wc = countWords(newDesc);
-    if(wc > 100){
-      alert(`Description is too long (${wc} words). Maximum is 100 words.`);
-      return;
-    }
-
+    if (wc > 100) { alert(`Description is too long (${wc} words). Maximum is 100 words.`); return; }
     saveBtn.disabled = true;
-    try{
-      const resp = await fetch("/api/teacher/update_course_description", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ course_code: courseCode, description: newDesc })
-      });
+    try {
+      const resp = await fetch("/api/teacher/update_course_description", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ course_code: courseCode, description: newDesc }) });
       const data = await resp.json();
-      if(resp.ok && data.ok){
-        if(descEl){
-          descEl.textContent = newDesc || "No description yet.";
-          descEl.style.display = "";
-        }
+      if (resp.ok && data.ok) {
+        if (descEl) { descEl.textContent = newDesc || "No description yet."; descEl.style.display = ""; }
         editor.remove();
       } else {
-        // show server error message if present
         const err = (data && data.error) ? data.error : "Failed to save description.";
         alert("Save failed: " + err);
       }
-    } catch(err){
+    } catch (err) {
       console.error(err);
       alert("Network error while saving description.");
-    } finally {
-      saveBtn.disabled = false;
-    }
+    } finally { saveBtn.disabled = false; }
   });
 
   courseBlock.appendChild(editor);
 }
 
-//
-// COUNSELOR: login, pagination, filtering, PDF export, and other features
-//
-counselorLoginBtn && counselorLoginBtn.addEventListener("click", async ()=>{
+// -------------------- Counselor: login, pagination, PDF export, modal editing --------------------
+counselorLoginBtn && counselorLoginBtn.addEventListener("click", async () => {
   const pw = counselorPassInput.value.trim();
   try {
-    const r = await fetch("/api/counselor/login",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({password: pw})
-    });
+    const r = await fetch("/api/counselor/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: pw }) });
     const d = await r.json();
-    if(d.ok){
-      counselorLoginMsg.textContent = "";
-      await loadCounselorState();
-    } else {
-      counselorLoginMsg.textContent = "Login failed.";
-    }
+    if (d.ok) { counselorLoginMsg.textContent = ""; await loadCounselorState(); } else { counselorLoginMsg.textContent = "Login failed."; }
   } catch (err) {
     console.error("Counselor login error", err);
     counselorLoginMsg.textContent = "Network error.";
   }
 });
 
-logoutCounselorBtn && logoutCounselorBtn.addEventListener("click", async ()=>{
-  await fetch("/api/counselor/logout", {method:"POST"});
+logoutCounselorBtn && logoutCounselorBtn.addEventListener("click", async () => {
+  await fetch("/api/counselor/logout", { method: "POST" });
   await loadCounselorState();
 });
 
-async function loadCounselorState(){
+async function loadCounselorState() {
   await loadSubjectColors();
-
   const rTest = await fetch("/api/counselor/students");
-  if(!rTest.ok){
-    show(counselorLoginArea);
-    hide(counselorDashboard);
-    hide(logoutCounselorBtn);
-    return;
-  }
-
-  hide(counselorLoginArea);
-  show(counselorDashboard);
-  show(logoutCounselorBtn);
-
-  await loadGradeLocks();
-  renderSubjectColorTable();
-  // reset pagination state when opening counselor dashboard
+  if (!rTest.ok) { show(counselorLoginArea); hide(counselorDashboard); hide(logoutCounselorBtn); return; }
+  hide(counselorLoginArea); show(counselorDashboard); show(logoutCounselorBtn);
+  await loadGradeLocks(); renderSubjectColorTable();
   counselorPage = 1;
-  counselorPerPage = (perPageSelect && perPageSelect.value) ? (perPageSelect.value === "all" ? "all" : parseInt(perPageSelect.value,10)) : 50;
-  await loadStudentList();
-  await loadPendingApprovals();
+  counselorPerPage = (perPageSelect && perPageSelect.value) ? (perPageSelect.value === "all" ? "all" : parseInt(perPageSelect.value, 10)) : 50;
+  await loadStudentList(); await loadPendingApprovals();
 }
 
-async function loadGradeLocks(){
+async function loadGradeLocks() {
   const r = await fetch("/api/counselor/settings");
-  if(!r.ok) return;
+  if (!r.ok) return;
   const d = await r.json();
   const locks = d.grade_submission_lock || {};
-  const order = ["9","10","11","12"];
+  const order = ["9", "10", "11", "12"];
   let out = `<table class="simpleTable"><thead><tr><th>Grade</th><th>Allow Submit?</th></tr></thead><tbody>`;
-  order.forEach(g=>{
-    out += `
-      <tr>
-        <td>${g}</td>
-        <td><input type="checkbox" class="gradeLockCB" data-grade="${g}" ${locks[g] ? "checked":""}></td>
-      </tr>
-    `;
+  order.forEach(g => {
+    out += `<tr><td>${g}</td><td><input type="checkbox" class="gradeLockCB" data-grade="${g}" ${locks[g] ? "checked" : ""}></td></tr>`;
   });
   out += `</tbody></table>`;
   gradeLockControls.innerHTML = out;
 }
 
-saveGradeLocksBtn && saveGradeLocksBtn.addEventListener("click", async ()=>{
-  const payload = {grade_submission_lock:{}};
-  gradeLockControls.querySelectorAll(".gradeLockCB").forEach(cb=>{
-    payload.grade_submission_lock[cb.dataset.grade] = cb.checked;
-  });
-  const r = await fetch("/api/counselor/settings",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify(payload)
-  });
+saveGradeLocksBtn && saveGradeLocksBtn.addEventListener("click", async () => {
+  const payload = { grade_submission_lock: {} };
+  gradeLockControls.querySelectorAll(".gradeLockCB").forEach(cb => { payload.grade_submission_lock[cb.dataset.grade] = cb.checked; });
+  const r = await fetch("/api/counselor/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   const d = await r.json();
   gradeLockMsg.textContent = d.ok ? "Saved." : "Error saving.";
 });
 
-function renderSubjectColorTable(){
-  const subjects = Object.keys(subjectColors).length ? Object.keys(subjectColors) : ["ELA","Math","Science","Social Studies","PE/Health","CTE","Elective","Other"];
+function renderSubjectColorTable() {
+  const subjects = Object.keys(subjectColors).length ? Object.keys(subjectColors) : ["ELA", "Math", "Science", "Social Studies", "PE/Health", "CTE", "Elective", "Other"];
   let out = "";
-  subjects.forEach(subj=>{
+  subjects.forEach(subj => {
     const col = subjectColors[subj] || "#475569";
-    out += `
-      <tr>
-        <td>${escapeHTML(subj)}</td>
-        <td><input type="color" class="subjectColorInput" data-subj="${escapeHTML(subj)}" value="${escapeHTML(col)}"></td>
-      </tr>
-    `;
+    out += `<tr><td>${escapeHTML(subj)}</td><td><input type="color" class="subjectColorInput" data-subj="${escapeHTML(subj)}" value="${escapeHTML(col)}"></td></tr>`;
   });
   subjectColorTbody.innerHTML = out;
 }
 
-saveSubjectColorsBtn && saveSubjectColorsBtn.addEventListener("click", async ()=>{
+saveSubjectColorsBtn && saveSubjectColorsBtn.addEventListener("click", async () => {
   const updated = {};
-  subjectColorTbody.querySelectorAll(".subjectColorInput").forEach(inp=>{
-    updated[inp.dataset.subj] = inp.value;
-  });
-
-  const r = await fetch("/api/counselor/settings",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({subject_colors: updated})
-  });
+  subjectColorTbody.querySelectorAll(".subjectColorInput").forEach(inp => { updated[inp.dataset.subj] = inp.value; });
+  const r = await fetch("/api/counselor/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subject_colors: updated }) });
   const d = await r.json();
-  if(d.ok){
-    colorSaveMsg.textContent = "Saved.";
-    subjectColors = d.settings.subject_colors || subjectColors;
-    renderSubjectColorTable();
-    await loadStudentList();
-  } else {
-    colorSaveMsg.textContent = "Error saving.";
-  }
+  if (d.ok) { colorSaveMsg.textContent = "Saved."; subjectColors = d.settings.subject_colors || subjectColors; renderSubjectColorTable(); await loadStudentList(); } else { colorSaveMsg.textContent = "Error saving."; }
 });
 
-uploadCsvBtn && uploadCsvBtn.addEventListener("click", async ()=>{
+uploadCsvBtn && uploadCsvBtn.addEventListener("click", async () => {
   const fd = new FormData();
-  if(studentsCsvInput.files[0]) fd.append("studentsCsv", studentsCsvInput.files[0]);
-  if(coursesCsvInput.files[0]) fd.append("coursesCsv", coursesCsvInput.files[0]);
-  if(teachersCsvInput.files[0]) fd.append("teachersCsv", teachersCsvInput.files[0]);
-
-  const r = await fetch("/api/counselor/upload_csv", {method:"POST", body: fd});
+  if (studentsCsvInput.files[0]) fd.append("studentsCsv", studentsCsvInput.files[0]);
+  if (coursesCsvInput.files[0]) fd.append("coursesCsv", coursesCsvInput.files[0]);
+  if (teachersCsvInput.files[0]) fd.append("teachersCsv", teachersCsvInput.files[0]);
+  const r = await fetch("/api/counselor/upload_csv", { method: "POST", body: fd });
   const d = await r.json();
-  if(d.ok){
-    uploadMsg.textContent = "Upload complete.";
-    await loadStudentList();
-    await loadPendingApprovals();
-  } else {
-    uploadMsg.textContent = "Upload failed.";
-  }
+  if (d.ok) { uploadMsg.textContent = "Upload complete."; await loadStudentList(); await loadPendingApprovals(); } else { uploadMsg.textContent = "Upload failed."; }
 });
 
-applyFiltersBtn && applyFiltersBtn.addEventListener("click", async () => {
-  counselorPage = 1;
-  await loadStudentList();
-});
+// Filters and pagination
+applyFiltersBtn && applyFiltersBtn.addEventListener("click", async () => { counselorPage = 1; await loadStudentList(); });
+perPageSelect && perPageSelect.addEventListener("change", async () => { counselorPage = 1; counselorPerPage = perPageSelect.value === "all" ? "all" : parseInt(perPageSelect.value, 10); await loadStudentList(); });
+pagePrevBtn && pagePrevBtn.addEventListener("click", async () => { if (counselorPerPage === "all") return; if (counselorPage > 1) { counselorPage--; await loadStudentList(); } });
+pageNextBtn && pageNextBtn.addEventListener("click", async () => { if (counselorPerPage === "all") return; const maxPage = Math.max(1, Math.ceil(counselorTotal / counselorPerPage)); if (counselorPage < maxPage) { counselorPage++; await loadStudentList(); } });
 
-if(perPageSelect) {
-  perPageSelect.addEventListener("change", async ()=>{
-    counselorPage = 1;
-    counselorPerPage = perPageSelect.value === "all" ? "all" : parseInt(perPageSelect.value, 10) || 50;
-    await loadStudentList();
-  });
-}
-
-pagePrevBtn && pagePrevBtn.addEventListener("click", async ()=>{
-  if(counselorPerPage === "all") return;
-  if(counselorPage > 1){
-    counselorPage--;
-    await loadStudentList();
-  }
-});
-pageNextBtn && pageNextBtn.addEventListener("click", async ()=>{
-  if(counselorPerPage === "all") return;
-  const maxPage = Math.max(1, Math.ceil(counselorTotal / counselorPerPage));
-  if(counselorPage < maxPage){
-    counselorPage++;
-    await loadStudentList();
-  }
-});
-
-async function loadStudentList(){
+async function loadStudentList() {
   const params = new URLSearchParams();
-  if(filterName && filterName.value.trim()) params.set("q_name", filterName.value.trim());
-  if(filterGrade && filterGrade.value.trim()) params.set("grade", filterGrade.value.trim());
-  if(filterCourse && filterCourse.value.trim()) params.set("course", filterCourse.value.trim());
-
+  if (filterName && filterName.value.trim()) params.set("q_name", filterName.value.trim());
+  if (filterGrade && filterGrade.value.trim()) params.set("grade", filterGrade.value.trim());
+  if (filterCourse && filterCourse.value.trim()) params.set("course", filterCourse.value.trim());
   params.set("page", String(counselorPage));
   params.set("per_page", counselorPerPage === "all" ? "all" : String(counselorPerPage));
-
   try {
     const r = await fetch(`/api/counselor/students?${params.toString()}`);
-    if(!r.ok){
-      counselorStudentRows.innerHTML = `<tr><td colspan="6" class="msg">Unable to load student list.</td></tr>`;
-      return;
-    }
+    if (!r.ok) { counselorStudentRows.innerHTML = `<tr><td colspan="6" class="msg">Unable to load student list.</td></tr>`; return; }
     const d = await r.json();
     counselorTotal = d.total || 0;
     const students = d.students || [];
-
     if (studentCount) {
-      if (counselorPerPage === "all") {
-        studentCount.textContent = `Total in view: ${counselorTotal} (showing all)`;
-        pageInfo && (pageInfo.textContent = `Page 1 of 1`);
-      } else {
-        const start = (d.page - 1) * d.per_page + 1;
-        const end = Math.min(d.total, start + d.per_page - 1);
-        studentCount.textContent = `Total in view: ${counselorTotal} (showing ${start}-${end})`;
-        const maxPage = Math.max(1, Math.ceil(counselorTotal / d.per_page));
-        pageInfo && (pageInfo.textContent = `Page ${d.page} of ${maxPage}`);
-      }
+      if (counselorPerPage === "all") { studentCount.textContent = `Total in view: ${counselorTotal} (showing all)`; pageInfo && (pageInfo.textContent = `Page 1 of 1`); }
+      else { const start = (d.page - 1) * d.per_page + 1; const end = Math.min(d.total, start + d.per_page - 1); studentCount.textContent = `Total in view: ${counselorTotal} (showing ${start}-${end})`; const maxPage = Math.max(1, Math.ceil(counselorTotal / d.per_page)); pageInfo && (pageInfo.textContent = `Page ${d.page} of ${maxPage}`); }
     }
-
     let out = "";
-    (students || []).forEach(stu=>{
+    (students || []).forEach(stu => {
       const rowClass = stu.scheduled ? "studentRowScheduled" : "studentRowNotScheduled";
-
       let chipsHTML = "";
-      (stu.academic_courses || []).slice(0,2).forEach(cn=>{
-        chipsHTML += `<span class="courseChip" style="${subjectToStyle("Other",subjectColors)}">${escapeHTML(cn)}</span> `;
-      });
-      if((stu.academic_courses || []).length > 2){
-        chipsHTML += `<span class="courseChip" style="${subjectToStyle("Other",subjectColors)}">+${(stu.academic_courses || []).length-2} more</span>`;
-      }
-
-      const approvalsSummary = `
-        <span class="approvalMini">Pending: <strong>${stu.pending_approvals || 0}</strong></span>
-        <span class="approvalMini">Rejected: <strong>${stu.rejected_approvals || 0}</strong></span>
-      `;
-
-      out += `
-        <tr class="${rowClass}">
-          <td><input type="checkbox" class="selectStudentCB" data-id="${escapeHTML(stu.student_id)}"></td>
-          <td>
-            <div class="boldish">${escapeHTML(stu.student_name)}</div>
-            <div class="dimtext">ID: ${escapeHTML(stu.student_id)} • Grade ${escapeHTML(stu.grade_level)}</div>
-          </td>
-          <td>${chipsHTML}</td>
-          <td>${escapeHTML(stu.top_elective || "")}</td>
-          <td>${approvalsSummary}</td>
-          <td>
-            <button class="smallBtn editBtn" data-id="${escapeHTML(stu.student_id)}">Edit</button>
-            <a class="buttonlike small" href="/schedule_card/${encodeURIComponent(stu.student_id)}" target="_blank">Card</a>
-          </td>
-        </tr>
-      `;
+      (stu.academic_courses || []).slice(0, 2).forEach(cn => { chipsHTML += `<span class="courseChip" style="${subjectToStyle("Other", subjectColors)}">${escapeHTML(cn)}</span> `; });
+      if ((stu.academic_courses || []).length > 2) { chipsHTML += `<span class="courseChip" style="${subjectToStyle("Other", subjectColors)}">+${(stu.academic_courses || []).length - 2} more</span>`; }
+      const approvalsSummary = `<span class="approvalMini">Pending: <strong>${stu.pending_approvals || 0}</strong></span> <span class="approvalMini">Rejected: <strong>${stu.rejected_approvals || 0}</strong></span>`;
+      out += `<tr class="${rowClass}"><td><input type="checkbox" class="selectStudentCB" data-id="${escapeHTML(stu.student_id)}"></td>
+        <td><div class="boldish">${escapeHTML(stu.student_name)}</div><div class="dimtext">ID: ${escapeHTML(stu.student_id)} • Grade ${escapeHTML(stu.grade_level)}</div></td>
+        <td>${chipsHTML}</td><td>${escapeHTML(stu.top_elective || "")}</td><td>${approvalsSummary}</td>
+        <td><button class="smallBtn editBtn" data-id="${escapeHTML(stu.student_id)}">Edit</button><a class="buttonlike small" href="/schedule_card/${encodeURIComponent(stu.student_id)}" target="_blank">Card</a></td></tr>`;
     });
-
     counselorStudentRows.innerHTML = out;
-
-    counselorStudentRows.querySelectorAll(".editBtn").forEach(btn=>{
-      btn.addEventListener("click", async ()=>{
-        await openCounselorEditSchedule(btn.dataset.id);
-      });
-    });
-  } catch (err) {
-    console.error("Error loading student list:", err);
-    counselorStudentRows.innerHTML = `<tr><td colspan="6" class="msg">Network error loading students.</td></tr>`;
-  }
+    counselorStudentRows.querySelectorAll(".editBtn").forEach(btn => btn.addEventListener("click", async () => { await openCounselorEditSchedule(btn.dataset.id); }));
+  } catch (err) { console.error("Error loading student list:", err); counselorStudentRows.innerHTML = `<tr><td colspan="6" class="msg">Network error loading students.</td></tr>`; }
 }
 
-// Print selected as single PDF
-printCardsSelectedBtn && printCardsSelectedBtn.addEventListener("click", async ()=>{
-  const checked = Array.from(document.querySelectorAll(".selectStudentCB:checked")).map(cb=>cb.dataset.id).filter(Boolean);
-  if(!checked || checked.length === 0){
-    alert("Select one or more students to print.");
-    return;
-  }
-
+// Print selected as PDF
+printCardsSelectedBtn && printCardsSelectedBtn.addEventListener("click", async () => {
+  const checked = Array.from(document.querySelectorAll(".selectStudentCB:checked")).map(cb => cb.dataset.id).filter(Boolean);
+  if (!checked || checked.length === 0) { alert("Select one or more students to print."); return; }
   try {
-    const resp = await fetch("/api/printables/schedule_cards_pdf", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ student_ids: checked })
-    });
-    if(!resp.ok){
-      const txt = await resp.text();
-      alert("Failed to generate PDF: " + txt);
-      return;
-    }
-    const blob = await resp.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "schedule_cards_selected.pdf";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
-  } catch (err) {
-    console.error(err);
-    alert("Error generating PDF.");
-  }
+    const resp = await fetch("/api/printables/schedule_cards_pdf", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student_ids: checked }) });
+    if (!resp.ok) { const txt = await resp.text(); alert("Failed to generate PDF: " + txt); return; }
+    const blob = await resp.blob(); const url = window.URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "schedule_cards_selected.pdf"; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+  } catch (err) { console.error(err); alert("Error generating PDF."); }
 });
 
-// Print all currently in view as a single PDF
-printCardsAllBtn && printCardsAllBtn.addEventListener("click", async ()=>{
-  // fetch all matching students (per_page=all)
+// Print all in view as PDF
+printCardsAllBtn && printCardsAllBtn.addEventListener("click", async () => {
   const params = new URLSearchParams();
-  if(filterName && filterName.value.trim()) params.set("q_name", filterName.value.trim());
-  if(filterGrade && filterGrade.value.trim()) params.set("grade", filterGrade.value.trim());
-  if(filterCourse && filterCourse.value.trim()) params.set("course", filterCourse.value.trim());
-  params.set("page", "1");
-  params.set("per_page", "all");
-
+  if (filterName && filterName.value.trim()) params.set("q_name", filterName.value.trim());
+  if (filterGrade && filterGrade.value.trim()) params.set("grade", filterGrade.value.trim());
+  if (filterCourse && filterCourse.value.trim()) params.set("course", filterCourse.value.trim());
+  params.set("page", "1"); params.set("per_page", "all");
   try {
     const r = await fetch(`/api/counselor/students?${params.toString()}`);
-    if(!r.ok){
-      alert("Failed to get students in view for PDF.");
-      return;
-    }
-    const d = await r.json();
-    const ids = (d.students || []).map(s => s.student_id);
-    if(!ids || ids.length === 0){
-      alert("No students in view to print.");
-      return;
-    }
-
-    const resp = await fetch("/api/printables/schedule_cards_pdf", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ student_ids: ids })
-    });
-    if(!resp.ok){
-      const txt = await resp.text();
-      alert("Failed to generate PDF: " + txt);
-      return;
-    }
-    const blob = await resp.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "schedule_cards_all.pdf";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
-  } catch (err) {
-    console.error(err);
-    alert("Error generating PDF for all in view.");
-  }
+    if (!r.ok) { alert("Failed to get students in view for PDF."); return; }
+    const d = await r.json(); const ids = (d.students || []).map(s => s.student_id);
+    if (!ids || ids.length === 0) { alert("No students in view to print."); return; }
+    const resp = await fetch("/api/printables/schedule_cards_pdf", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student_ids: ids }) });
+    if (!resp.ok) { const txt = await resp.text(); alert("Failed to generate PDF: " + txt); return; }
+    const blob = await resp.blob(); const url = window.URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "schedule_cards_all.pdf"; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+  } catch (err) { console.error(err); alert("Error generating PDF for all in view."); }
 });
 
-exportFilteredBtn && exportFilteredBtn.addEventListener("click", ()=>{
+exportFilteredBtn && exportFilteredBtn.addEventListener("click", () => {
   const params = new URLSearchParams();
-  if(filterName && filterName.value.trim()) params.set("q_name", filterName.value.trim());
-  if(filterGrade && filterGrade.value.trim()) params.set("grade", filterGrade.value.trim());
-  if(filterCourse && filterCourse.value.trim()) params.set("course", filterCourse.value.trim());
+  if (filterName && filterName.value.trim()) params.set("q_name", filterName.value.trim());
+  if (filterGrade && filterGrade.value.trim()) params.set("grade", filterGrade.value.trim());
+  if (filterCourse && filterCourse.value.trim()) params.set("course", filterCourse.value.trim());
   window.open(`/api/counselor/export_filtered?${params.toString()}`, "_blank");
 });
+exportAllSchedulesBtn && exportAllSchedulesBtn.addEventListener("click", () => { window.open("/api/counselor/export_all_schedules", "_blank"); });
+rosterPrintBtn && rosterPrintBtn.addEventListener("click", () => { const code = rosterCourseCode.value.trim(); if (!code) return; window.open(`/roster/${encodeURIComponent(code)}`, "_blank"); });
 
-exportAllSchedulesBtn && exportAllSchedulesBtn.addEventListener("click", ()=>{
-  window.open("/api/counselor/export_all_schedules", "_blank");
-});
-
-rosterPrintBtn && rosterPrintBtn.addEventListener("click", ()=>{
-  const code = rosterCourseCode.value.trim();
-  if(!code) return;
-  window.open(`/roster/${encodeURIComponent(code)}`, "_blank");
-});
-
-async function loadPendingApprovals(){
+async function loadPendingApprovals() {
   const r = await fetch("/api/counselor/pending_approvals");
-  if(!r.ok){
-    pendingApprovalCount.textContent = "";
-    pendingApprovalsList.innerHTML = `<div class="msg">Unable to load pending approvals.</div>`;
-    return;
-  }
-  const d = await r.json();
-  pendingApprovalCount.textContent = `Pending approvals: ${d.total}`;
-
-  if((d.pending || []).length === 0){
-    pendingApprovalsList.innerHTML = `<div class="infoBlock">No pending approvals.</div>`;
-    return;
-  }
-
-  let rows = "";
-  d.pending.forEach(p=>{
-    rows += `
-      <tr>
-        <td>${escapeHTML(p.course_name)} <span class="dimtext">(${escapeHTML(p.course_code)})</span></td>
-        <td>${escapeHTML(p.student_name)} <span class="dimtext">(${escapeHTML(p.student_id)})</span></td>
-        <td>${escapeHTML(p.grade_level)}</td>
-        <td>${escapeHTML(p.teacher_email || "")}</td>
-        <td class="dimtext">${escapeHTML(p.updated_at || "")}</td>
-      </tr>
-    `;
-  });
-
-  pendingApprovalsList.innerHTML = `
-    <table class="simpleTable">
-      <thead>
-        <tr><th>Course</th><th>Student</th><th>Grade</th><th>Teacher</th><th>Last Updated</th></tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
+  if (!r.ok) { pendingApprovalCount.textContent = ""; pendingApprovalsList.innerHTML = `<div class="msg">Unable to load pending approvals.</div>`; return; }
+  const d = await r.json(); pendingApprovalCount.textContent = `Pending approvals: ${d.total}`;
+  if ((d.pending || []).length === 0) { pendingApprovalsList.innerHTML = `<div class="infoBlock">No pending approvals.</div>`; return; }
+  let rows = ""; d.pending.forEach(p => { rows += `<tr><td>${escapeHTML(p.course_name)} <span class="dimtext">(${escapeHTML(p.course_code)})</span></td><td>${escapeHTML(p.student_name)} <span class="dimtext">(${escapeHTML(p.student_id)})</span></td><td>${escapeHTML(p.grade_level)}</td><td>${escapeHTML(p.teacher_email || "")}</td><td class="dimtext">${escapeHTML(p.updated_at || "")}</td></tr>`; });
+  pendingApprovalsList.innerHTML = `<table class="simpleTable"><thead><tr><th>Course</th><th>Student</th><th>Grade</th><th>Teacher</th><th>Last Updated</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-//
-// COUNSELOR EDIT SCHEDULE (unchanged logic)
-//
-async function openCounselorEditSchedule(student_id){
-  const r = await fetch(`/api/counselor/get_schedule?student_id=${encodeURIComponent(student_id)}`);
-  const d = await r.json();
-  if(!d.schedule) return;
+// -------------------- Counselor modal editing functions --------------------
+editModalCloseBtn && editModalCloseBtn.addEventListener("click", () => closeEditModal());
 
-  counselorEditStudentID = d.schedule.student_id;
-  counselorEditStudentName = d.schedule.student_name;
-  counselorEditStudentGrade = d.schedule.grade_level;
-
-  counselorAcademicItems = (d.schedule_items && d.schedule_items.academic) ? d.schedule_items.academic : [];
-  counselorElectiveItems = (d.schedule_items && d.schedule_items.elective) ? d.schedule_items.elective : [];
-  counselorNotesInput.value = (d.schedule.special_instructions || "");
-
-  editScheduleInfo.innerHTML = `
-    <div><strong>${escapeHTML(counselorEditStudentName)}</strong> (ID: ${escapeHTML(counselorEditStudentID)}) Grade ${escapeHTML(counselorEditStudentGrade)}</div>
-  `;
-
-  renderCounselorSelectedLists();
-  show(editScheduleArea);
-  await runCounselorCourseSearch();
+function openEditModal() {
+  if (!editScheduleModal) return;
+  editScheduleMsg.textContent = "";
+  show(editScheduleModal);
+  // optionally set focus
 }
 
-function renderCounselorSelectedLists(){
+function closeEditModal() {
+  if (!editScheduleModal) return;
+  hide(editScheduleModal);
+  // clear modal state
+  counselorEditStudentID = null;
+  counselorEditStudentName = null;
+  counselorEditStudentGrade = null;
+  counselorAcademicItems = [];
+  counselorElectiveItems = [];
+  if (cSelectedAcademicList) cSelectedAcademicList.innerHTML = "";
+  if (cSelectedElectiveList) cSelectedElectiveList.innerHTML = "";
+  if (cAvailableCoursesGrid) cAvailableCoursesGrid.innerHTML = "";
+  if (counselorNotesInput) counselorNotesInput.value = "";
+  if (editScheduleInfo) editScheduleInfo.innerHTML = "";
+}
+
+async function openCounselorEditSchedule(student_id) {
+  try {
+    const r = await fetch(`/api/counselor/get_schedule?student_id=${encodeURIComponent(student_id)}`);
+    if (!r.ok) { alert("Unable to fetch schedule for editing."); return; }
+    const d = await r.json();
+    if (!d.schedule) { alert("Schedule not found."); return; }
+
+    counselorEditStudentID = d.schedule.student_id;
+    counselorEditStudentName = d.schedule.student_name;
+    counselorEditStudentGrade = d.schedule.grade_level;
+    counselorAcademicItems = (d.schedule_items && d.schedule_items.academic) ? d.schedule_items.academic.slice() : [];
+    counselorElectiveItems = (d.schedule_items && d.schedule_items.elective) ? d.schedule_items.elective.slice() : [];
+    if (counselorNotesInput) counselorNotesInput.value = (d.schedule.special_instructions || "");
+
+    if (editScheduleInfo) editScheduleInfo.innerHTML = `<div><strong>${escapeHTML(counselorEditStudentName)}</strong> (ID: ${escapeHTML(counselorEditStudentID)}) Grade ${escapeHTML(counselorEditStudentGrade)}</div>`;
+    renderCounselorSelectedLists();
+    openEditModal();
+    // preload available courses for the grade
+    await runCounselorCourseSearch();
+  } catch (err) {
+    console.error("Error opening edit schedule:", err);
+    alert("Network error while opening edit modal.");
+  }
+}
+
+function renderCounselorSelectedLists() {
   renderCounselorList(cSelectedAcademicList, counselorAcademicItems, true);
   renderCounselorList(cSelectedElectiveList, counselorElectiveItems, false);
 }
 
-function renderCounselorList(container, items, isAcademic){
+function renderCounselorList(container, items, isAcademic) {
+  if (!container) return;
   let out = "";
-  items.forEach((it, idx)=>{
+  items.forEach((it, idx) => {
     const style = subjectToStyle(it.subject_area, subjectColors);
     const cls = approvalClass(it);
-
-    if(isAcademic){
-      out += `
-        <div class="selectedRow ${cls}">
-          <span class="courseChip" style="${style}">
-            ${escapeHTML(it.display)} ${approvalLabel(it)}
-          </span>
-          <button class="smallBtn removeCounselorBtn" data-idx="${idx}" data-type="acad">Remove</button>
-        </div>
-      `;
+    if (isAcademic) {
+      out += `<div class="selectedRow ${cls}"><span class="courseChip" style="${style}">${escapeHTML(it.display)} ${approvalLabel(it)}</span>
+        <button class="smallBtn removeCounselorBtn" data-idx="${idx}" data-type="acad">Remove</button></div>`;
     } else {
-      out += `
-        <div class="selectedRow ${cls}">
-          <span class="priorityNum">#${idx+1}</span>
-          <span class="courseChip" style="${style}">
-            ${escapeHTML(it.display)} ${approvalLabel(it)}
-          </span>
-          <div class="electiveBtns">
-            <button class="smallBtn upCounselorBtn" data-idx="${idx}">▲</button>
-            <button class="smallBtn downCounselorBtn" data-idx="${idx}">▼</button>
-            <button class="smallBtn removeCounselorBtn" data-idx="${idx}" data-type="elec">Remove</button>
-          </div>
-        </div>
-      `;
+      out += `<div class="selectedRow ${cls}"><span class="priorityNum">#${idx + 1}</span><span class="courseChip" style="${style}">${escapeHTML(it.display)} ${approvalLabel(it)}</span>
+        <div class="electiveBtns"><button class="smallBtn upCounselorBtn" data-idx="${idx}">▲</button><button class="smallBtn downCounselorBtn" data-idx="${idx}">▼</button>
+        <button class="smallBtn removeCounselorBtn" data-idx="${idx}" data-type="elec">Remove</button></div></div>`;
     }
   });
-  if(items.length===0) out = `<div class="dimtext">(none selected)</div>`;
+  if (items.length === 0) out = `<div class="dimtext">(none selected)</div>`;
   container.innerHTML = out;
 
-  container.querySelectorAll(".removeCounselorBtn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const idx = parseInt(btn.dataset.idx);
-      const type = btn.dataset.type;
-      if(type === "acad") counselorAcademicItems.splice(idx,1);
-      else counselorElectiveItems.splice(idx,1);
-      renderCounselorSelectedLists();
-    });
-  });
-  container.querySelectorAll(".upCounselorBtn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      moveItemUp(counselorElectiveItems, parseInt(btn.dataset.idx));
-      renderCounselorSelectedLists();
-    });
-  });
-  container.querySelectorAll(".downCounselorBtn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      moveItemDown(counselorElectiveItems, parseInt(btn.dataset.idx));
-      renderCounselorSelectedLists();
-    });
-  });
+  container.querySelectorAll(".removeCounselorBtn").forEach(btn => btn.addEventListener("click", () => {
+    const idx = parseInt(btn.dataset.idx); const type = btn.dataset.type;
+    if (type === "acad") counselorAcademicItems.splice(idx, 1); else counselorElectiveItems.splice(idx, 1);
+    renderCounselorSelectedLists();
+  }));
+  container.querySelectorAll(".upCounselorBtn").forEach(btn => btn.addEventListener("click", () => { moveItemUp(counselorElectiveItems, parseInt(btn.dataset.idx)); renderCounselorSelectedLists(); }));
+  container.querySelectorAll(".downCounselorBtn").forEach(btn => btn.addEventListener("click", () => { moveItemDown(counselorElectiveItems, parseInt(btn.dataset.idx)); renderCounselorSelectedLists(); }));
 }
 
 cRunCourseSearchBtn && cRunCourseSearchBtn.addEventListener("click", runCounselorCourseSearch);
-
-async function runCounselorCourseSearch(){
-  if(!counselorEditStudentGrade) return;
-
-  const params = new URLSearchParams();
-  params.set("grade", counselorEditStudentGrade);
-  if(cFilterSubject && cFilterSubject.value.trim()) params.set("subject", cFilterSubject.value.trim());
-  if(cFilterNameSearch && cFilterNameSearch.value.trim()) params.set("name", cFilterNameSearch.value.trim());
-
-  const r = await fetch(`/api/courses?${params.toString()}`);
-  const d = await r.json();
-  lastCounselorCourseSearch = d.courses || [];
-
-  let out = "";
-  lastCounselorCourseSearch.forEach(c=>{
-    out += renderCourseCard(c);
-  });
-  cAvailableCoursesGrid.innerHTML = out;
-
-  cAvailableCoursesGrid.querySelectorAll(".addCourseBtn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const code = btn.dataset.code;
-      const found = lastCounselorCourseSearch.find(x=>x.course_code === code);
-      if(!found) return;
-
-      const display = `${found.course_name} (${found.course_code})`;
-      const item = {
-        display,
-        course_code: found.course_code,
-        subject_area: found.subject_area || "Other",
-        requires_approval: !!found.requires_approval,
-        approval_status: found.requires_approval ? "pending" : "approved"
-      };
-
-      const isElective = (found.subject_area || "").toLowerCase().includes("cte") || (found.subject_area || "").toLowerCase().includes("elective");
-      if(isElective){
-        if(counselorElectiveItems.length >= MAX_ELECTIVE_CHOICES) return;
-        if(!counselorElectiveItems.find(x=>x.course_code===item.course_code)) counselorElectiveItems.push(item);
-      } else {
-        if(counselorAcademicItems.length >= MAX_ACADEMIC_COURSES) return;
-        if(!counselorAcademicItems.find(x=>x.course_code===item.course_code)) counselorAcademicItems.push(item);
-      }
-
-      renderCounselorSelectedLists();
-    });
-  });
+async function runCounselorCourseSearch() {
+  if (!counselorEditStudentGrade) return;
+  const params = new URLSearchParams(); params.set("grade", counselorEditStudentGrade);
+  if (cFilterSubject && cFilterSubject.value.trim()) params.set("subject", cFilterSubject.value.trim());
+  if (cFilterNameSearch && cFilterNameSearch.value.trim()) params.set("name", cFilterNameSearch.value.trim());
+  try {
+    const r = await fetch(`/api/courses?${params.toString()}`);
+    const d = await r.json(); lastCounselorCourseSearch = d.courses || [];
+    let out = ""; lastCounselorCourseSearch.forEach(c => { out += renderCourseCard(c); });
+    if (cAvailableCoursesGrid) cAvailableCoursesGrid.innerHTML = out;
+    if (cAvailableCoursesGrid) {
+      cAvailableCoursesGrid.querySelectorAll(".addCourseBtn").forEach(btn => btn.addEventListener("click", () => {
+        const code = btn.dataset.code; const found = lastCounselorCourseSearch.find(x => x.course_code === code); if (!found) return;
+        const display = `${found.course_name} (${found.course_code})`; const item = { display, course_code: found.course_code, subject_area: found.subject_area || "Other", requires_approval: !!found.requires_approval, approval_status: found.requires_approval ? "pending" : "approved" };
+        const isElective = (found.subject_area || "").toLowerCase().includes("cte") || (found.subject_area || "").toLowerCase().includes("elective");
+        if (isElective) { if (counselorElectiveItems.length >= MAX_ELECTIVE_CHOICES) return; if (!counselorElectiveItems.find(x => x.course_code === item.course_code)) counselorElectiveItems.push(item); }
+        else { if (counselorAcademicItems.length >= MAX_ACADEMIC_COURSES) return; if (!counselorAcademicItems.find(x => x.course_code === item.course_code)) counselorAcademicItems.push(item); }
+        renderCounselorSelectedLists();
+      }));
+    }
+  } catch (err) { console.error("Error loading counselor course search:", err); }
 }
 
-saveCounselorScheduleBtn && saveCounselorScheduleBtn.addEventListener("click", async ()=>{
-  if(!counselorEditStudentID) return;
-
+// Save edited schedule
+saveCounselorScheduleBtn && saveCounselorScheduleBtn.addEventListener("click", async () => {
+  if (!counselorEditStudentID) { editScheduleMsg.textContent = "No student selected."; return; }
   const payload = {
     student_id: counselorEditStudentID,
     student_name: counselorEditStudentName,
     grade_level: counselorEditStudentGrade,
-    academic_courses: counselorAcademicItems.map(x=>x.display),
-    elective_courses: counselorElectiveItems.map(x=>x.display),
-    special_instructions: counselorNotesInput.value.trim()
+    academic_courses: counselorAcademicItems.map(x => x.display),
+    elective_courses: counselorElectiveItems.map(x => x.display),
+    special_instructions: (counselorNotesInput ? counselorNotesInput.value.trim() : "")
   };
-
-  const r = await fetch("/api/counselor/save_schedule",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify(payload)
-  });
-  const d = await r.json();
-  editScheduleMsg.textContent = d.ok ? "Saved." : (d.error || "Error saving.");
-  if(d.ok){
-    await loadStudentList();
-    await loadPendingApprovals();
-    // re-open to refresh approval statuses
-    await openCounselorEditSchedule(counselorEditStudentID);
-  }
+  try {
+    const r = await fetch("/api/counselor/save_schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const d = await r.json();
+    if (d.ok) { editScheduleMsg.textContent = "Saved."; await loadStudentList(); await loadPendingApprovals(); closeEditModal(); } else { editScheduleMsg.textContent = d.error || "Error saving."; }
+  } catch (err) { console.error("Error saving counselor schedule:", err); editScheduleMsg.textContent = "Network error while saving."; }
 });
 
-resetScheduleBtn && resetScheduleBtn.addEventListener("click", async ()=>{
-  if(!counselorEditStudentID) return;
-  const r = await fetch("/api/counselor/reset_schedule",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({student_id: counselorEditStudentID})
-  });
-  const d = await r.json();
-  if(d.ok){
-    editScheduleMsg.textContent = "Schedule reset.";
-    counselorAcademicItems = [];
-    counselorElectiveItems = [];
-    counselorNotesInput.value = "";
-    renderCounselorSelectedLists();
-    await loadStudentList();
-    await loadPendingApprovals();
-  } else {
-    editScheduleMsg.textContent = d.error || "Error resetting.";
-  }
+// Reset schedule via server
+resetScheduleBtn && resetScheduleBtn.addEventListener("click", async () => {
+  if (!counselorEditStudentID) { editScheduleMsg.textContent = "No student selected."; return; }
+  if (!confirm("Reset schedule for this student? This will clear all selected courses and approvals.")) return;
+  try {
+    const r = await fetch("/api/counselor/reset_schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student_id: counselorEditStudentID }) });
+    const d = await r.json();
+    if (d.ok) { editScheduleMsg.textContent = "Schedule reset."; await loadStudentList(); await loadPendingApprovals(); closeEditModal(); } else { editScheduleMsg.textContent = d.error || "Error resetting."; }
+  } catch (err) { console.error("Error resetting schedule:", err); editScheduleMsg.textContent = "Network error while resetting."; }
 });
 
-deleteStudentBtn && deleteStudentBtn.addEventListener("click", async ()=>{
-  if(!counselorEditStudentID) return;
-  const r = await fetch("/api/counselor/delete_student",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({student_id: counselorEditStudentID})
-  });
-  const d = await r.json();
-  if(d.ok){
-    editScheduleMsg.textContent = "Student deleted.";
-    hide(editScheduleArea);
-    await loadStudentList();
-    await loadPendingApprovals();
-  } else {
-    editScheduleMsg.textContent = d.error || "Error deleting.";
-  }
+// Delete student
+deleteStudentBtn && deleteStudentBtn.addEventListener("click", async () => {
+  if (!counselorEditStudentID) return;
+  if (!confirm("Delete this student and all their data? This cannot be undone.")) return;
+  try {
+    const r = await fetch("/api/counselor/delete_student", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student_id: counselorEditStudentID }) });
+    const d = await r.json();
+    if (d.ok) { editScheduleMsg.textContent = "Student deleted."; closeEditModal(); await loadStudentList(); await loadPendingApprovals(); } else { editScheduleMsg.textContent = d.error || "Error deleting."; }
+  } catch (err) { console.error("Error deleting student:", err); editScheduleMsg.textContent = "Network error while deleting."; }
 });
 
-//
-// Default landing
-//
+// -------------------- Initial UI state --------------------
 showOnly(studentPanel);
 hide(studentScheduleArea);
 show(studentLoginArea);
+
+// End of static/main.js
