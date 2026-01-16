@@ -3,7 +3,14 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, session
 
 from app.auth import is_teacher
-from app.storage import read_teachers, read_courses, read_schedules, read_approvals, write_approvals
+from app.storage import (
+    read_teachers,
+    read_courses,
+    read_schedules,
+    read_approvals,
+    write_approvals,
+    write_courses,
+)
 from app.logic import course_by_code_map, extract_course_code, ensure_approval_rows_for_schedule
 
 bp_teacher = Blueprint("teacher", __name__)
@@ -62,6 +69,7 @@ def api_teacher_roster():
     teacher_email = (session.get("teacher_email") or "").lower()
     course_map = course_by_code_map()
 
+    # only courses assigned to this teacher
     my_courses = [c for c in read_courses() if (c.get("teacher_email", "") or "").lower() == teacher_email]
     my_codes = {c["course_code"] for c in my_courses}
 
@@ -107,7 +115,16 @@ def api_teacher_roster():
         block["students"].sort(key=lambda x: x["student_name"].lower())
 
     roster_list = list(roster_by_course.values())
-    roster_list.sort(key=lambda b: (b["course"]["course_name"] or "").lower())
+
+    # Sort so that approval-required courses appear first, then by course name
+    def sort_key(block):
+        course = block.get("course", {})
+        requires = bool(course.get("requires_approval", False))
+        name = (course.get("course_name") or "").lower()
+        # we want requires_approval True first => sort by not requires (False < True) so invert
+        return (not requires, name)
+
+    roster_list.sort(key=sort_key)
 
     return jsonify({"courses": roster_list})
 
@@ -156,3 +173,49 @@ def api_teacher_set_approval():
 
     write_approvals(approvals)
     return jsonify({"ok": True})
+
+
+@bp_teacher.post("/api/teacher/update_course_description")
+def api_teacher_update_course_description():
+    """
+    Payload: { course_code: "CODE", description: "..." }
+    Only the teacher assigned to the course can update the description.
+    Maximum 100 words; if exceeded, returns 400.
+    """
+    if not is_teacher():
+        return jsonify({"error": "not_authorized"}), 403
+
+    data = request.json or {}
+    course_code = (data.get("course_code", "") or "").strip()
+    description = (data.get("description", "") or "").strip()
+
+    if not course_code:
+        return jsonify({"error": "missing_fields"}), 400
+
+    # simple word count - split on whitespace
+    words = [w for w in description.split() if w]
+    if len(words) > 100:
+        return jsonify({"error": "too_many_words", "word_count": len(words), "max_words": 100}), 400
+
+    teacher_email = (session.get("teacher_email") or "").lower()
+
+    courses = read_courses()
+    found = False
+    for c in courses:
+        if (c.get("course_code") or "").strip() == course_code:
+            # check ownership
+            if (c.get("teacher_email", "") or "").lower() != teacher_email:
+                return jsonify({"error": "not_your_course"}), 403
+            # update the description field used by storage
+            c["description"] = description
+            found = True
+            updated_course = c
+            break
+
+    if not found:
+        return jsonify({"error": "course_not_found"}), 404
+
+    write_courses(courses)
+
+    # return updated course to the client
+    return jsonify({"ok": True, "course": updated_course})

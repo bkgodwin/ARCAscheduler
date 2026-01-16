@@ -1,0 +1,20 @@
+<div class="course-block" data-course-code="{{ course.course_code }}">
+  <h3 class="course-name">{{ course.course_name }}</h3>
+
+  <div class="requires-approval-indicator">
+    {% if course.requires_approval %}
+      <strong>Requires Approval</strong>
+    {% endif %}
+  </div>
+
+  <div class="course-description">
+    {{ course.course_description or "No description yet." }}
+  </div>
+
+  <!-- Only show edit button to the assigned teacher.
+       The backend will still enforce ownership checks. -->
+  <button type="button" class="edit-course-desc">Edit description</button>
+</div>
+
+<!-- include the new script -->
+<script src="/static/teacher-description.js"></script>
