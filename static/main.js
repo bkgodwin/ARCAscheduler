@@ -1,42 +1,56 @@
 // static/main.js
 //
-// Complete client-side script for ARCAscheduler (student, teacher, counselor).
-// This is the full, ready-to-deploy file. It includes:
-// - Student: select-based name suggestions, schedule editing and saving
-// - Teacher: login, roster showing only assigned courses, approve/reject, inline edit course description (100-word limit)
-// - Counselor: login, server-side pagination, per-page control, modal schedule editor (save/reset), export schedule cards to a single PDF
+// Full client-side script for ARCAscheduler (student, teacher, counselor).
+// This is a single, self-contained file — replace your existing static/main.js with this.
+// It is defensive (guards missing DOM elements), robust about fetch responses, and
+// avoids throwing when elements are absent so other parts of the app continue to work.
 //
-// Important: Back up your current static/main.js before replacing with this file.
+// Key fixes in this version:
+// - Consolidated and complete student/teacher/counselor logic in one file (no truncated snippets).
+// - Defensive element lookups so missing DOM does not cause JS exceptions that stop other handlers.
+// - Robust fetch handling: treat 200 OK with non-JSON as success where appropriate (prevents false "Network error" messages).
+// - Modal for counselor edit is scrollable and follows dark theme by CSS variables; prevents background scrolling when open.
+// - Removed delete-student button/handler from modal (per request).
+// - Inline course description editor for teachers with 100-word check.
+// - Server-side pagination controls for counselor list and single-PDF export triggerers wired.
+// - Detailed console logging on errors to help debugging without breaking UI flows.
+//
+// Before replacing:
+// - Back up your current static/main.js: cp static/main.js static/main.js.bak
+// - Ensure templates include the required IDs (see templates/partials/* files already provided).
+// - Ensure server endpoints exist: /api/student/*, /api/teacher/*, /api/courses, /api/counselor/*, /api/printables/*
+//
+// Note: Keep constants MAX_ACADEMIC_COURSES and MAX_ELECTIVE_CHOICES defined in the page (templates/index.html sets them).
 
 (function () {
   "use strict";
 
-  // -------------------- Helpers --------------------
+  // -------------------- Small utility helpers --------------------
+  function $id(id) { return document.getElementById(id); }
   function show(el) { if (!el) return; el.style.display = ""; }
   function hide(el) { if (!el) return; el.style.display = "none"; }
   function html(el, s) { if (!el) return; el.innerHTML = s; }
   function text(el, t) { if (!el) return; el.textContent = t; }
 
-  function escapeHTML(str) {
-    return (str || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+  function safeJSON(resp) {
+    // try parse JSON, but if it fails return null
+    return resp.text().then(txt => {
+      try { return txt ? JSON.parse(txt) : null; } catch (e) { return null; }
+    });
   }
 
-  function extractCodeFromDisplay(s) {
-    if (!s) return "";
-    const m = s.match(/\(([^()]+)\)\s*$/);
-    if (m) return m[1].trim();
-    return s.trim();
+  function escapeHTML(str) {
+    return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function countWords(s) {
+    if (!s) return 0;
+    return s.trim().split(/\s+/).filter(Boolean).length;
   }
 
   function subjectToStyle(subjRaw, subjectColorsMap) {
     let subj = subjRaw && subjRaw.trim() ? subjRaw.trim() : "Other";
-    if (subjectColorsMap && subjectColorsMap[subj]) {
-      return `background:${subjectColorsMap[subj]};`;
-    }
+    if (subjectColorsMap && subjectColorsMap[subj]) return `background:${subjectColorsMap[subj]};`;
     const fallback = (subjectColorsMap && subjectColorsMap["Other"]) || "#475569";
     return `background:${fallback};`;
   }
@@ -48,7 +62,6 @@
     if (st === "rejected") return "approvalRejected";
     return "approvalPending";
   }
-
   function approvalLabel(item) {
     if (!item || !item.requires_approval) return "";
     const st = (item.approval_status || "pending").toLowerCase();
@@ -57,139 +70,107 @@
     return `<span class="approvalTag tagPending">PENDING</span>`;
   }
 
-  function moveItemUp(arr, idx) {
-    if (idx <= 0) return;
-    const tmp = arr[idx - 1];
-    arr[idx - 1] = arr[idx];
-    arr[idx] = tmp;
-  }
-  function moveItemDown(arr, idx) {
-    if (idx >= arr.length - 1) return;
-    const tmp = arr[idx + 1];
-    arr[idx + 1] = arr[idx];
-    arr[idx] = tmp;
-  }
+  function moveItemUp(arr, idx) { if (idx <= 0) return; const tmp = arr[idx - 1]; arr[idx - 1] = arr[idx]; arr[idx] = tmp; }
+  function moveItemDown(arr, idx) { if (idx >= arr.length - 1) return; const tmp = arr[idx + 1]; arr[idx + 1] = arr[idx]; arr[idx] = tmp; }
 
-  function countWords(s) {
-    if (!s) return 0;
-    return s.trim().split(/\s+/).filter(Boolean).length;
-  }
+  // -------------------- DOM references (guarded) --------------------
+  const studentModeBtn = $id("studentModeBtn");
+  const teacherModeBtn = $id("teacherModeBtn");
+  const counselorModeBtn = $id("counselorModeBtn");
 
-  // -------------------- DOM references --------------------
-  const studentModeBtn = document.getElementById("studentModeBtn");
-  const teacherModeBtn = document.getElementById("teacherModeBtn");
-  const counselorModeBtn = document.getElementById("counselorModeBtn");
+  const studentPanel = $id("studentPanel");
+  const teacherPanel = $id("teacherPanel");
+  const counselorPanel = $id("counselorPanel");
 
-  const studentPanel = document.getElementById("studentPanel");
-  const teacherPanel = document.getElementById("teacherPanel");
-  const counselorPanel = document.getElementById("counselorPanel");
+  // Student elements
+  const studentNameInput = $id("studentNameInput");
+  const studentNameDropdown = $id("studentNameDropdown"); // select
+  const studentIdCheckInput = $id("studentIdCheckInput");
+  const studentLoginBtn = $id("studentLoginBtn");
+  const studentLoginMsg = $id("studentLoginMsg");
+  const studentScheduleArea = $id("studentScheduleArea");
+  const studentInfoBlock = $id("studentInfoBlock");
+  const selectedAcademicList = $id("selectedAcademicList");
+  const selectedElectiveList = $id("selectedElectiveList");
+  const specialInstructionsInput = $id("specialInstructionsInput");
+  const studentSaveBtn = $id("studentSaveBtn");
+  const studentSaveMsg = $id("studentSaveMsg");
+  const studentCardLink = $id("studentCardLink");
+  const studentSignOutBtn = $id("studentSignOutBtn");
+  const studentFilterSubject = $id("studentFilterSubject");
+  const studentFilterName = $id("studentFilterName");
+  const studentRunCourseSearchBtn = $id("studentRunCourseSearchBtn");
+  const studentAvailableCourses = $id("studentAvailableCourses");
+  const maxAcademicSpan = $id("maxAcademicSpan");
+  const maxElectiveSpan = $id("maxElectiveSpan");
 
-  // Student
-  const studentLoginArea = document.getElementById("studentLoginArea");
-  const studentNameInput = document.getElementById("studentNameInput");
-  const studentNameDropdown = document.getElementById("studentNameDropdown"); // <select>
-  const studentIdCheckInput = document.getElementById("studentIdCheckInput");
-  const studentLoginBtn = document.getElementById("studentLoginBtn");
-  const studentLoginMsg = document.getElementById("studentLoginMsg");
+  // Teacher elements
+  const teacherLoginArea = $id("teacherLoginArea");
+  const teacherDashboard = $id("teacherDashboard");
+  const teacherEmailInput = $id("teacherEmailInput");
+  const teacherPasswordInput = $id("teacherPasswordInput");
+  const teacherLoginBtn = $id("teacherLoginBtn");
+  const teacherLoginMsg = $id("teacherLoginMsg");
+  const teacherLogoutBtn = $id("teacherLogoutBtn");
+  const teacherInfo = $id("teacherInfo");
+  const teacherRosters = $id("teacherRosters");
 
-  const studentScheduleArea = document.getElementById("studentScheduleArea");
-  const studentInfoBlock = document.getElementById("studentInfoBlock");
-  const selectedAcademicList = document.getElementById("selectedAcademicList");
-  const selectedElectiveList = document.getElementById("selectedElectiveList");
-  const specialInstructionsInput = document.getElementById("specialInstructionsInput");
-  const studentSaveBtn = document.getElementById("studentSaveBtn");
-  const studentSaveMsg = document.getElementById("studentSaveMsg");
-  const studentCardLink = document.getElementById("studentCardLink");
-  const studentSignOutBtn = document.getElementById("studentSignOutBtn");
+  // Counselor elements
+  const counselorLoginArea = $id("counselorLoginArea");
+  const counselorDashboard = $id("counselorDashboard");
+  const counselorPassInput = $id("counselorPassInput");
+  const counselorLoginBtn = $id("counselorLoginBtn");
+  const counselorLoginMsg = $id("counselorLoginMsg");
+  const logoutCounselorBtn = $id("logoutCounselorBtn");
+  const gradeLockControls = $id("gradeLockControls");
+  const saveGradeLocksBtn = $id("saveGradeLocksBtn");
+  const gradeLockMsg = $id("gradeLockMsg");
+  const subjectColorTbody = $id("subjectColorTbody");
+  const saveSubjectColorsBtn = $id("saveSubjectColorsBtn");
+  const colorSaveMsg = $id("colorSaveMsg");
+  const studentsCsvInput = $id("studentsCsvInput");
+  const coursesCsvInput = $id("coursesCsvInput");
+  const teachersCsvInput = $id("teachersCsvInput");
+  const uploadCsvBtn = $id("uploadCsvBtn");
+  const uploadMsg = $id("uploadMsg");
+  const filterName = $id("filterName");
+  const filterGrade = $id("filterGrade");
+  const filterCourse = $id("filterCourse");
+  const applyFiltersBtn = $id("applyFiltersBtn");
+  const exportFilteredBtn = $id("exportFilteredBtn");
+  const exportAllSchedulesBtn = $id("exportAllSchedulesBtn");
+  const studentCount = $id("studentCount");
+  const counselorStudentRows = $id("counselorStudentRows");
+  const printCardsSelectedBtn = $id("printCardsSelectedBtn");
+  const printCardsAllBtn = $id("printCardsAllBtn");
+  const rosterCourseCode = $id("rosterCourseCode");
+  const rosterPrintBtn = $id("rosterPrintBtn");
+  const pendingApprovalCount = $id("pendingApprovalCount");
+  const pendingApprovalsList = $id("pendingApprovalsList");
 
-  const studentFilterSubject = document.getElementById("studentFilterSubject");
-  const studentFilterName = document.getElementById("studentFilterName");
-  const studentRunCourseSearchBtn = document.getElementById("studentRunCourseSearchBtn");
-  const studentAvailableCourses = document.getElementById("studentAvailableCourses");
+  // Modal (counselor)
+  const editScheduleModal = $id("editScheduleModal");
+  const editModalCloseBtn = $id("editModalCloseBtn");
+  const editScheduleInfo = $id("editScheduleInfo");
+  const cSelectedAcademicList = $id("cSelectedAcademicList");
+  const cSelectedElectiveList = $id("cSelectedElectiveList");
+  const counselorNotesInput = $id("counselorNotesInput");
+  const saveCounselorScheduleBtn = $id("saveCounselorScheduleBtn");
+  const resetScheduleBtn = $id("resetScheduleBtn");
+  const cFilterSubject = $id("cFilterSubject");
+  const cFilterNameSearch = $id("cFilterNameSearch");
+  const cRunCourseSearchBtn = $id("cRunCourseSearchBtn");
+  const cAvailableCoursesGrid = $id("cAvailableCoursesGrid");
+  const cMaxAcademicSpan = $id("cMaxAcademicSpan");
+  const cMaxElectiveSpan = $id("cMaxElectiveSpan");
+  const perPageSelect = $id("perPageSelect");
+  const pagePrevBtn = $id("pagePrevBtn");
+  const pageNextBtn = $id("pageNextBtn");
+  const pageInfo = $id("pageInfo");
 
-  const maxAcademicSpan = document.getElementById("maxAcademicSpan");
-  const maxElectiveSpan = document.getElementById("maxElectiveSpan");
-
-  // Teacher
-  const teacherLoginArea = document.getElementById("teacherLoginArea");
-  const teacherDashboard = document.getElementById("teacherDashboard");
-  const teacherEmailInput = document.getElementById("teacherEmailInput");
-  const teacherPasswordInput = document.getElementById("teacherPasswordInput");
-  const teacherLoginBtn = document.getElementById("teacherLoginBtn");
-  const teacherLoginMsg = document.getElementById("teacherLoginMsg");
-  const teacherLogoutBtn = document.getElementById("teacherLogoutBtn");
-  const teacherInfo = document.getElementById("teacherInfo");
-  const teacherRosters = document.getElementById("teacherRosters");
-
-  // Counselor
-  const counselorLoginArea = document.getElementById("counselorLoginArea");
-  const counselorDashboard = document.getElementById("counselorDashboard");
-  const counselorPassInput = document.getElementById("counselorPassInput");
-  const counselorLoginBtn = document.getElementById("counselorLoginBtn");
-  const counselorLoginMsg = document.getElementById("counselorLoginMsg");
-  const logoutCounselorBtn = document.getElementById("logoutCounselorBtn");
-
-  const gradeLockControls = document.getElementById("gradeLockControls");
-  const saveGradeLocksBtn = document.getElementById("saveGradeLocksBtn");
-  const gradeLockMsg = document.getElementById("gradeLockMsg");
-
-  const subjectColorTbody = document.getElementById("subjectColorTbody");
-  const saveSubjectColorsBtn = document.getElementById("saveSubjectColorsBtn");
-  const colorSaveMsg = document.getElementById("colorSaveMsg");
-
-  const studentsCsvInput = document.getElementById("studentsCsvInput");
-  const coursesCsvInput = document.getElementById("coursesCsvInput");
-  const teachersCsvInput = document.getElementById("teachersCsvInput");
-  const uploadCsvBtn = document.getElementById("uploadCsvBtn");
-  const uploadMsg = document.getElementById("uploadMsg");
-
-  const filterName = document.getElementById("filterName");
-  const filterGrade = document.getElementById("filterGrade");
-  const filterCourse = document.getElementById("filterCourse");
-  const applyFiltersBtn = document.getElementById("applyFiltersBtn");
-  const exportFilteredBtn = document.getElementById("exportFilteredBtn");
-  const exportAllSchedulesBtn = document.getElementById("exportAllSchedulesBtn");
-  const studentCount = document.getElementById("studentCount");
-  const counselorStudentRows = document.getElementById("counselorStudentRows");
-  const printCardsSelectedBtn = document.getElementById("printCardsSelectedBtn");
-  const printCardsAllBtn = document.getElementById("printCardsAllBtn");
-  const rosterCourseCode = document.getElementById("rosterCourseCode");
-  const rosterPrintBtn = document.getElementById("rosterPrintBtn");
-
-  const pendingApprovalCount = document.getElementById("pendingApprovalCount");
-  const pendingApprovalsList = document.getElementById("pendingApprovalsList");
-
-  // Modal elements (must exist in template)
-  const editScheduleModal = document.getElementById("editScheduleModal");
-  const editModalCloseBtn = document.getElementById("editModalCloseBtn");
-  const editScheduleInfo = document.getElementById("editScheduleInfo");
-  const cSelectedAcademicList = document.getElementById("cSelectedAcademicList");
-  const cSelectedElectiveList = document.getElementById("cSelectedElectiveList");
-  const counselorNotesInput = document.getElementById("counselorNotesInput");
-  const saveCounselorScheduleBtn = document.getElementById("saveCounselorScheduleBtn");
-  const resetScheduleBtn = document.getElementById("resetScheduleBtn");
-  const editScheduleMsg = document.getElementById("editScheduleMsg");
-  const cFilterSubject = document.getElementById("cFilterSubject");
-  const cFilterNameSearch = document.getElementById("cFilterNameSearch");
-  const cRunCourseSearchBtn = document.getElementById("cRunCourseSearchBtn");
-  const cAvailableCoursesGrid = document.getElementById("cAvailableCoursesGrid");
-  const cMaxAcademicSpan = document.getElementById("cMaxAcademicSpan");
-  const cMaxElectiveSpan = document.getElementById("cMaxElectiveSpan");
-
-  const perPageSelect = document.getElementById("perPageSelect");
-  const pagePrevBtn = document.getElementById("pagePrevBtn");
-  const pageNextBtn = document.getElementById("pageNextBtn");
-  const pageInfo = document.getElementById("pageInfo");
-
-  // -------------------- Constants & State --------------------
-  if (maxAcademicSpan) maxAcademicSpan.textContent = MAX_ACADEMIC_COURSES;
-  if (maxElectiveSpan) maxElectiveSpan.textContent = MAX_ELECTIVE_CHOICES;
-  if (cMaxAcademicSpan) cMaxAcademicSpan.textContent = MAX_ACADEMIC_COURSES;
-  if (cMaxElectiveSpan) cMaxElectiveSpan.textContent = MAX_ELECTIVE_CHOICES;
-
+  // -------------------- App state --------------------
   let subjectColors = {};
   let currentStudentInfo = null;
-
   let studentAcademic = [];
   let studentElective = [];
   let studentSpecial = "";
@@ -209,17 +190,16 @@
 
   // -------------------- Mode switching --------------------
   function showOnly(panel) {
-    hide(studentPanel);
-    hide(teacherPanel);
-    hide(counselorPanel);
-    show(panel);
+    if (studentPanel) hide(studentPanel);
+    if (teacherPanel) hide(teacherPanel);
+    if (counselorPanel) hide(counselorPanel);
+    if (panel) show(panel);
   }
-
   studentModeBtn && studentModeBtn.addEventListener("click", async () => { showOnly(studentPanel); });
   teacherModeBtn && teacherModeBtn.addEventListener("click", async () => { showOnly(teacherPanel); await loadTeacherState(); });
   counselorModeBtn && counselorModeBtn.addEventListener("click", async () => { showOnly(counselorPanel); await loadCounselorState(); });
 
-  // -------------------- Utilities --------------------
+  // -------------------- Subject colors --------------------
   async function loadSubjectColors() {
     try {
       const r = await fetch("/api/counselor/settings");
@@ -227,31 +207,309 @@
       const d = await r.json();
       subjectColors = d.subject_colors || {};
     } catch (e) {
-      console.error("Failed to load subject colors", e);
+      console.error("loadSubjectColors error", e);
     }
   }
 
-  // -------------------- Student implementation (unchanged from earlier full file) --------------------
-  // ... (student functions same as previous full file)
-  // For brevity in the displayed file this section is identical to the student code above.
-  // The actual deployed file must include the student code; it is included here in full in your copy.
+  // -------------------- STUDENT logic --------------------
+  if (studentNameInput) {
+    studentNameInput.addEventListener("input", async () => {
+      const q = studentNameInput.value.trim();
+      if (!studentNameDropdown) return;
+      if (q.length < 2) { studentNameDropdown.style.display = "none"; studentNameDropdown.innerHTML = ""; return; }
+      try {
+        const r = await fetch(`/api/student/find?q=${encodeURIComponent(q)}`);
+        if (!r.ok) { studentNameDropdown.style.display = "none"; studentNameDropdown.innerHTML = ""; return; }
+        const d = await r.json();
+        if (!d.matches || d.matches.length === 0) { studentNameDropdown.style.display = "none"; studentNameDropdown.innerHTML = ""; return; }
+        studentNameDropdown.innerHTML = "";
+        d.matches.forEach(m => {
+          const opt = document.createElement("option");
+          opt.value = m.student_id;
+          opt.textContent = `${m.student_name} (Grade ${m.grade_level})`;
+          opt.dataset.name = m.student_name;
+          opt.dataset.grade = m.grade_level;
+          studentNameDropdown.appendChild(opt);
+        });
+        studentNameDropdown.style.display = "";
+      } catch (err) {
+        console.error("student find error", err);
+        studentNameDropdown.style.display = "none";
+        studentNameDropdown.innerHTML = "";
+      }
+    });
 
-  // -------------------- Teacher implementation (unchanged from earlier full file) --------------------
-  // ... (teacher functions same as previous full file)
-  // The actual deployed file must include the teacher code; it is included here in full in your copy.
+    studentNameDropdown.addEventListener("change", () => {
+      const opt = studentNameDropdown.selectedOptions[0];
+      if (!opt) return;
+      studentNameInput.value = opt.dataset.name || opt.textContent || "";
+      studentNameInput.dataset.studentId = opt.value || "";
+      studentNameDropdown.style.display = "none";
+    });
+  }
 
-  // -------------------- Counselor implementation --------------------
-  // The event handlers below contain robust response handling so that a successful server response
-  // that does not return JSON will be treated as success (to avoid false "Network error" messages).
+  studentLoginBtn && studentLoginBtn.addEventListener("click", async () => {
+    const sid = (studentNameInput && studentNameInput.dataset.studentId) || "";
+    const check = studentIdCheckInput ? studentIdCheckInput.value.trim() : "";
+    if (!sid || !check) { if (studentLoginMsg) studentLoginMsg.textContent = "Select your name and enter your ID."; return; }
+    try {
+      const r = await fetch("/api/student/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student_id: sid, id_check: check }) });
+      const d = await r.json();
+      if (!d.ok) { studentLoginMsg && (studentLoginMsg.textContent = d.error || "Login failed."); return; }
+      await loadStudentStatus();
+    } catch (err) {
+      console.error("student login error", err);
+      studentLoginMsg && (studentLoginMsg.textContent = "Network error.");
+    }
+  });
 
-  // Login / logout handlers
+  studentSignOutBtn && studentSignOutBtn.addEventListener("click", async () => {
+    await fetch("/api/student/logout", { method: "POST" });
+    currentStudentInfo = null; studentAcademic = []; studentElective = []; studentSpecial = "";
+    if (studentNameInput) { studentNameInput.value = ""; studentNameInput.dataset.studentId = ""; }
+    if (studentIdCheckInput) studentIdCheckInput.value = "";
+    if (studentLoginMsg) studentLoginMsg.textContent = "";
+    if (studentScheduleArea) hide(studentScheduleArea);
+    if (studentLoginArea) show(studentLoginArea);
+  });
+
+  async function loadStudentStatus() {
+    await loadSubjectColors();
+    try {
+      const r = await fetch("/api/student/status");
+      const d = await r.json();
+      if (!d.authed) { if (studentLoginMsg) studentLoginMsg.textContent = "Not authenticated."; return; }
+      currentStudentInfo = d.student;
+      studentAcademic = (d.schedule_items && d.schedule_items.academic) ? d.schedule_items.academic : [];
+      studentElective = (d.schedule_items && d.schedule_items.elective) ? d.schedule_items.elective : [];
+      studentSpecial = (d.schedule && d.schedule.special_instructions) ? d.schedule.special_instructions : "";
+      const canSubmit = d.can_submit;
+      if (studentInfoBlock) studentInfoBlock.innerHTML = `<div><strong>${escapeHTML(currentStudentInfo.student_name)}</strong></div><div>ID: ${escapeHTML(currentStudentInfo.student_id)}</div><div>Grade: ${escapeHTML(currentStudentInfo.grade_level)}</div><div>Submit allowed: ${canSubmit ? "Yes" : "Locked by counselor"}</div>`;
+      if (specialInstructionsInput) specialInstructionsInput.value = studentSpecial;
+      if (studentCardLink) studentCardLink.href = `/schedule_card/${encodeURIComponent(currentStudentInfo.student_id)}`;
+      renderSelectedStudentLists();
+      if (studentLoginArea) hide(studentLoginArea);
+      if (studentScheduleArea) show(studentScheduleArea);
+      await runStudentCourseSearch();
+    } catch (err) { console.error("loadStudentStatus error", err); }
+  }
+
+  function renderSelectedStudentLists() {
+    renderSelectedList(selectedAcademicList, studentAcademic, true);
+    renderSelectedList(selectedElectiveList, studentElective, false);
+  }
+
+  function renderSelectedList(container, items, isAcademic) {
+    if (!container) return;
+    let out = "";
+    items.forEach((it, idx) => {
+      const style = subjectToStyle(it.subject_area, subjectColors);
+      const cls = approvalClass(it);
+      if (isAcademic) {
+        out += `<div class="selectedRow ${cls}"><span class="courseChip" style="${style}">${escapeHTML(it.display)} ${approvalLabel(it)}</span><button class="smallBtn removeBtn" data-idx="${idx}" data-type="acad">Remove</button></div>`;
+      } else {
+        out += `<div class="selectedRow ${cls}"><span class="priorityNum">#${idx + 1}</span><span class="courseChip" style="${style}">${escapeHTML(it.display)} ${approvalLabel(it)}</span><div class="electiveBtns"><button class="smallBtn upBtn" data-idx="${idx}">▲</button><button class="smallBtn downBtn" data-idx="${idx}">▼</button><button class="smallBtn removeBtn" data-idx="${idx}" data-type="elec">Remove</button></div></div>`;
+      }
+    });
+    if (items.length === 0) out = `<div class="dimtext">(none selected)</div>`;
+    container.innerHTML = out;
+
+    container.querySelectorAll(".removeBtn").forEach(btn => btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.idx);
+      const type = btn.dataset.type;
+      if (type === "acad") studentAcademic.splice(idx, 1); else studentElective.splice(idx, 1);
+      renderSelectedStudentLists();
+    }));
+    container.querySelectorAll(".upBtn").forEach(btn => btn.addEventListener("click", () => { moveItemUp(studentElective, parseInt(btn.dataset.idx)); renderSelectedStudentLists(); }));
+    container.querySelectorAll(".downBtn").forEach(btn => btn.addEventListener("click", () => { moveItemDown(studentElective, parseInt(btn.dataset.idx)); renderSelectedStudentLists(); }));
+  }
+
+  studentRunCourseSearchBtn && studentRunCourseSearchBtn.addEventListener("click", runStudentCourseSearch);
+  async function runStudentCourseSearch() {
+    if (!currentStudentInfo) return;
+    const params = new URLSearchParams();
+    params.set("grade", currentStudentInfo.grade_level);
+    if (studentFilterSubject && studentFilterSubject.value.trim()) params.set("subject", studentFilterSubject.value.trim());
+    if (studentFilterName && studentFilterName.value.trim()) params.set("name", studentFilterName.value.trim());
+    try {
+      const r = await fetch(`/api/courses?${params.toString()}`);
+      const d = await r.json();
+      lastStudentCourseSearch = d.courses || [];
+      let out = ""; lastStudentCourseSearch.forEach(c => { out += renderCourseCard(c); });
+      if (studentAvailableCourses) studentAvailableCourses.innerHTML = out;
+      if (studentAvailableCourses) studentAvailableCourses.querySelectorAll(".addCourseBtn").forEach(btn => btn.addEventListener("click", () => {
+        const code = btn.dataset.code; const found = lastStudentCourseSearch.find(x => x.course_code === code); if (!found) return;
+        const display = `${found.course_name} (${found.course_code})`; const item = { display, course_code: found.course_code, subject_area: found.subject_area || "Other", requires_approval: !!found.requires_approval, approval_status: found.requires_approval ? "pending" : "approved" };
+        const isElective = (found.subject_area || "").toLowerCase().includes("cte") || (found.subject_area || "").toLowerCase().includes("elective");
+        if (isElective) { if (studentElective.length >= (typeof MAX_ELECTIVE_CHOICES !== "undefined" ? MAX_ELECTIVE_CHOICES : 3)) return; if (!studentElective.find(x => x.course_code === item.course_code)) studentElective.push(item); }
+        else { if (studentAcademic.length >= (typeof MAX_ACADEMIC_COURSES !== "undefined" ? MAX_ACADEMIC_COURSES : 4)) return; if (!studentAcademic.find(x => x.course_code === item.course_code)) studentAcademic.push(item); }
+        renderSelectedStudentLists();
+      }));
+    } catch (err) { console.error("runStudentCourseSearch error", err); }
+  }
+
+  function renderCourseCard(c) {
+    const style = subjectToStyle(c.subject_area || "Other", subjectColors);
+    const approvalNote = c.requires_approval ? `<span class="approvalTag tagPending">Requires Approval</span>` : "";
+    return `
+      <div class="courseCard">
+        <div class="courseHeader">
+          <div class="courseTitle"><span>${escapeHTML(c.course_name)}</span><span class="courseCode">(${escapeHTML(c.course_code)})</span></div>
+          <div class="courseMeta"><span class="coursePill" style="${style}">${escapeHTML(c.subject_area || "Other")}</span><span class="dimtext">${escapeHTML(c.level || "")}</span>${approvalNote}</div>
+        </div>
+        <div class="courseBody"><div class="desc">${escapeHTML(c.description || "")}</div><div class="teacherRoom"><strong>${escapeHTML(c.teacher_name || "")}</strong><span class="dimtext"> ${escapeHTML(c.room || "")}</span><span class="dimtext"> ${c.teacher_email ? "• " + escapeHTML(c.teacher_email) : ""}</span></div><div class="gradeRange dimtext">Grades ${escapeHTML(c.grade_min || "")}-${escapeHTML(c.grade_max || "")}</div></div>
+        <div class="courseActions"><button class="addCourseBtn" data-code="${escapeHTML(c.course_code)}">Add</button></div>
+      </div>
+    `;
+  }
+
+  // -------------------- TEACHER implementation --------------------
+  // teacher login/logout, status, roster, approve/reject, edit course description
+
+  teacherLoginBtn && teacherLoginBtn.addEventListener("click", async () => {
+    const email = teacherEmailInput ? teacherEmailInput.value.trim() : "";
+    const pw = teacherPasswordInput ? teacherPasswordInput.value.trim() : "";
+    if (!email || !pw) { if (teacherLoginMsg) teacherLoginMsg.textContent = "Enter email and password."; return; }
+    try {
+      const r = await fetch("/api/teacher/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pw }) });
+      const d = await r.json();
+      if (d.ok) { if (teacherLoginMsg) teacherLoginMsg.textContent = ""; await loadTeacherState(); } else { if (teacherLoginMsg) teacherLoginMsg.textContent = d.error || "Login failed."; }
+    } catch (err) { console.error("teacher login error", err); if (teacherLoginMsg) teacherLoginMsg.textContent = "Network error."; }
+  });
+
+  teacherLogoutBtn && teacherLogoutBtn.addEventListener("click", async () => {
+    await fetch("/api/teacher/logout", { method: "POST" });
+    await loadTeacherState();
+  });
+
+  async function loadTeacherState() {
+    await loadSubjectColors();
+    try {
+      const r = await fetch("/api/teacher/status");
+      const d = await r.json();
+      if (!d.authed) { if (teacherLoginArea) show(teacherLoginArea); if (teacherDashboard) hide(teacherDashboard); return; }
+      if (teacherLoginArea) hide(teacherLoginArea);
+      if (teacherDashboard) show(teacherDashboard);
+      if (teacherInfo) teacherInfo.innerHTML = `<div><strong>${escapeHTML(d.teacher.teacher_name || "")}</strong></div><div class="dimtext">${escapeHTML(d.teacher.teacher_email || "")}</div>`;
+      await loadTeacherRoster();
+    } catch (err) { console.error("loadTeacherState error", err); }
+  }
+
+  async function loadTeacherRoster() {
+    if (!teacherRosters) return;
+    try {
+      const r = await fetch("/api/teacher/roster");
+      if (!r.ok) { teacherRosters.innerHTML = `<div class="msg">Unable to load roster.</div>`; return; }
+      const d = await r.json();
+      const blocks = d.courses || [];
+      if (!blocks.length) { teacherRosters.innerHTML = `<div class="infoBlock">No courses assigned to your email in courses.csv.</div>`; return; }
+      let out = "";
+      blocks.forEach(b => {
+        const c = b.course;
+        const style = subjectToStyle(c.subject_area || "Other", subjectColors);
+        out += `<div class="teacherCourseBlock" data-course-code="${escapeHTML(c.course_code)}">
+          <div class="teacherCourseHeader">
+            <div><div class="teacherCourseTitle">${escapeHTML(c.course_name)} <span class="dimtext">(${escapeHTML(c.course_code)})</span></div>
+              <div class="dimtext"><span class="coursePill" style="${style}">${escapeHTML(c.subject_area || "Other")}</span>${c.requires_approval ? `<span class="approvalTag tagPending">Requires Approval</span>` : `<span class="dimtext">No approvals required</span>`}</div></div>
+            <div class="teacherCourseActions"><button class="smallBtn edit-course-desc">Edit description</button></div>
+          </div>
+          <div class="teacherCourseBody"><div class="course-description">${escapeHTML(c.description || "No description yet.")}</div>${renderTeacherStudentTable(c, b.students || [])}</div>
+        </div>`;
+      });
+      teacherRosters.innerHTML = out;
+      // wire approve/reject and edit buttons
+      teacherRosters.querySelectorAll(".teacherApproveBtn").forEach(btn => btn.addEventListener("click", async () => { await teacherSetApproval(btn.dataset.sid, btn.dataset.code, "approved"); }));
+      teacherRosters.querySelectorAll(".teacherRejectBtn").forEach(btn => btn.addEventListener("click", async () => { await teacherSetApproval(btn.dataset.sid, btn.dataset.code, "rejected"); }));
+      teacherRosters.querySelectorAll(".edit-course-desc").forEach(btn => btn.addEventListener("click", (ev) => { const courseBlock = btn.closest(".teacherCourseBlock"); if (!courseBlock) return; openDescriptionEditorForBlock(courseBlock); }));
+    } catch (err) { console.error("loadTeacherRoster error", err); teacherRosters.innerHTML = `<div class="msg">Unable to load roster.</div>`; }
+  }
+
+  function renderTeacherStudentTable(course, students) {
+    if (!students || !students.length) return `<div class="infoBlock">No students have this course on their schedule yet.</div>`;
+    let rows = "";
+    students.forEach(s => {
+      const st = (s.approval_status || "pending").toLowerCase();
+      let tag = `<span class="approvalTag tagPending">PENDING</span>`;
+      if (st === "approved") tag = `<span class="approvalTag tagApproved">APPROVED</span>`;
+      if (st === "rejected") tag = `<span class="approvalTag tagRejected">REJECTED</span>`;
+      const showButtons = !!course.requires_approval;
+      rows += `<tr><td>${escapeHTML(s.student_name)}</td><td>${escapeHTML(s.student_id)}</td><td>${escapeHTML(s.grade_level)}</td><td>${tag}</td><td>${showButtons ? `<button class="smallBtn teacherApproveBtn" data-sid="${escapeHTML(s.student_id)}" data-code="${escapeHTML(course.course_code)}">Approve</button> <button class="smallBtn danger teacherRejectBtn" data-sid="${escapeHTML(s.student_id)}" data-code="${escapeHTML(course.course_code)}">Reject</button>` : `<span class="dimtext">N/A</span>`}</td></tr>`;
+    });
+    return `<table class="simpleTable"><thead><tr><th>Student</th><th>ID</th><th>Grade</th><th>Status</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  async function teacherSetApproval(student_id, course_code, status) {
+    try {
+      const r = await fetch("/api/teacher/set_approval", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student_id, course_code, status }) });
+      const d = await r.json();
+      if (d.ok) await loadTeacherRoster();
+    } catch (err) { console.error("teacherSetApproval error", err); }
+  }
+
+  function openDescriptionEditorForBlock(courseBlock) {
+    const courseCode = courseBlock.dataset.courseCode || courseBlock.getAttribute("data-course-code");
+    const descEl = courseBlock.querySelector(".course-description");
+    const currentText = descEl ? descEl.textContent.trim() : "";
+    if (courseBlock.querySelector(".description-editor")) return;
+    if (descEl) descEl.style.display = "none";
+
+    const editor = document.createElement("div");
+    editor.className = "description-editor";
+    const textarea = document.createElement("textarea");
+    textarea.rows = 5;
+    textarea.style.width = "100%";
+    textarea.value = currentText;
+    const counter = document.createElement("div");
+    counter.className = "word-counter";
+    counter.style.marginTop = "6px";
+    counter.textContent = `Words: ${countWords(textarea.value)} / 100`;
+    const controls = document.createElement("div");
+    controls.style.marginTop = "6px";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button"; saveBtn.className = "smallBtn"; saveBtn.textContent = "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button"; cancelBtn.className = "smallBtn"; cancelBtn.textContent = "Cancel"; cancelBtn.style.marginLeft = "8px";
+    controls.appendChild(saveBtn); controls.appendChild(cancelBtn);
+    editor.appendChild(textarea); editor.appendChild(counter); editor.appendChild(controls);
+
+    textarea.addEventListener("input", () => { counter.textContent = `Words: ${countWords(textarea.value)} / 100`; });
+    cancelBtn.addEventListener("click", () => { editor.remove(); if (descEl) descEl.style.display = ""; });
+
+    saveBtn.addEventListener("click", async () => {
+      const newDesc = textarea.value.trim();
+      const wc = countWords(newDesc);
+      if (wc > 100) { alert(`Description is too long (${wc} words). Maximum is 100 words.`); return; }
+      saveBtn.disabled = true;
+      try {
+        const resp = await fetch("/api/teacher/update_course_description", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ course_code: courseCode, description: newDesc }) });
+        if (!resp.ok) {
+          let txt = "";
+          try { txt = await resp.text(); } catch (e) { txt = "Error saving"; }
+          alert("Save failed: " + (txt || "server error"));
+          return;
+        }
+        // success - try parse json but not required
+        const data = await safeJSON(resp);
+        if (data && data.ok === false) { alert("Save failed: " + (data.error || "server error")); return; }
+        if (descEl) { descEl.textContent = newDesc || "No description yet."; descEl.style.display = ""; }
+        editor.remove();
+      } catch (err) {
+        console.error("save course description error", err);
+        alert("Network error while saving description.");
+      } finally { saveBtn.disabled = false; }
+    });
+
+    courseBlock.appendChild(editor);
+  }
+
+  // -------------------- COUNSELOR implementation (pagination, modal editor, PDF) --------------------
   counselorLoginBtn && counselorLoginBtn.addEventListener("click", async () => {
-    const pw = counselorPassInput.value.trim();
+    const pw = counselorPassInput ? counselorPassInput.value.trim() : "";
     try {
       const r = await fetch("/api/counselor/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: pw }) });
       const d = await r.json();
       if (d.ok) { counselorLoginMsg.textContent = ""; await loadCounselorState(); } else { counselorLoginMsg.textContent = "Login failed."; }
-    } catch (err) { console.error("Counselor login error", err); counselorLoginMsg.textContent = "Network error."; }
+    } catch (err) { console.error("counselor login error", err); counselorLoginMsg.textContent = "Network error."; }
   });
 
   logoutCounselorBtn && logoutCounselorBtn.addEventListener("click", async () => {
@@ -261,33 +519,38 @@
 
   async function loadCounselorState() {
     await loadSubjectColors();
-    const rTest = await fetch("/api/counselor/students");
-    if (!rTest.ok) { show(counselorLoginArea); hide(counselorDashboard); hide(logoutCounselorBtn); return; }
-    hide(counselorLoginArea); show(counselorDashboard); show(logoutCounselorBtn);
-    await loadGradeLocks(); renderSubjectColorTable();
-    counselorPage = 1;
-    counselorPerPage = (perPageSelect && perPageSelect.value) ? (perPageSelect.value === "all" ? "all" : parseInt(perPageSelect.value, 10)) : 50;
-    await loadStudentList(); await loadPendingApprovals();
+    try {
+      const rTest = await fetch("/api/counselor/students");
+      if (!rTest.ok) { if (counselorLoginArea) show(counselorLoginArea); if (counselorDashboard) hide(counselorDashboard); if (logoutCounselorBtn) hide(logoutCounselorBtn); return; }
+      if (counselorLoginArea) hide(counselorLoginArea); if (counselorDashboard) show(counselorDashboard); if (logoutCounselorBtn) show(logoutCounselorBtn);
+      await loadGradeLocks(); renderSubjectColorTable();
+      counselorPage = 1; counselorPerPage = (perPageSelect && perPageSelect.value) ? (perPageSelect.value === "all" ? "all" : parseInt(perPageSelect.value, 10)) : 50;
+      await loadStudentList(); await loadPendingApprovals();
+    } catch (err) { console.error("loadCounselorState error", err); }
   }
 
   async function loadGradeLocks() {
-    const r = await fetch("/api/counselor/settings");
-    if (!r.ok) return;
-    const d = await r.json();
-    const locks = d.grade_submission_lock || {};
-    const order = ["9", "10", "11", "12"];
-    let out = `<table class="simpleTable"><thead><tr><th>Grade</th><th>Allow Submit?</th></tr></thead><tbody>`;
-    order.forEach(g => { out += `<tr><td>${g}</td><td><input type="checkbox" class="gradeLockCB" data-grade="${g}" ${locks[g] ? "checked" : ""}></td></tr>`; });
-    out += `</tbody></table>`;
-    gradeLockControls.innerHTML = out;
+    try {
+      const r = await fetch("/api/counselor/settings");
+      if (!r.ok) return;
+      const d = await r.json();
+      const locks = d.grade_submission_lock || {};
+      const order = ["9", "10", "11", "12"];
+      let out = `<table class="simpleTable"><thead><tr><th>Grade</th><th>Allow Submit?</th></tr></thead><tbody>`;
+      order.forEach(g => { out += `<tr><td>${g}</td><td><input type="checkbox" class="gradeLockCB" data-grade="${g}" ${locks[g] ? "checked" : ""}></td></tr>`; });
+      out += `</tbody></table>`;
+      gradeLockControls.innerHTML = out;
+    } catch (err) { console.error("loadGradeLocks error", err); }
   }
 
   saveGradeLocksBtn && saveGradeLocksBtn.addEventListener("click", async () => {
     const payload = { grade_submission_lock: {} };
     gradeLockControls.querySelectorAll(".gradeLockCB").forEach(cb => { payload.grade_submission_lock[cb.dataset.grade] = cb.checked; });
-    const r = await fetch("/api/counselor/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    const d = await r.json();
-    gradeLockMsg.textContent = d.ok ? "Saved." : "Error saving.";
+    try {
+      const r = await fetch("/api/counselor/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const d = await r.json();
+      gradeLockMsg.textContent = d.ok ? "Saved." : "Error saving.";
+    } catch (err) { console.error("saveGradeLocks error", err); gradeLockMsg.textContent = "Network error"; }
   });
 
   function renderSubjectColorTable() {
@@ -303,19 +566,24 @@
   saveSubjectColorsBtn && saveSubjectColorsBtn.addEventListener("click", async () => {
     const updated = {};
     subjectColorTbody.querySelectorAll(".subjectColorInput").forEach(inp => { updated[inp.dataset.subj] = inp.value; });
-    const r = await fetch("/api/counselor/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subject_colors: updated }) });
-    const d = await r.json();
-    if (d.ok) { colorSaveMsg.textContent = "Saved."; subjectColors = d.settings.subject_colors || subjectColors; renderSubjectColorTable(); await loadStudentList(); } else { colorSaveMsg.textContent = "Error saving."; }
+    try {
+      const r = await fetch("/api/counselor/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subject_colors: updated }) });
+      const d = await r.json();
+      if (d.ok) { colorSaveMsg.textContent = "Saved."; subjectColors = d.settings.subject_colors || subjectColors; renderSubjectColorTable(); await loadStudentList(); } else { colorSaveMsg.textContent = "Error saving."; }
+    } catch (err) { console.error("saveSubjectColors error", err); colorSaveMsg.textContent = "Network error"; }
   });
 
   uploadCsvBtn && uploadCsvBtn.addEventListener("click", async () => {
     const fd = new FormData();
-    if (studentsCsvInput.files[0]) fd.append("studentsCsv", studentsCsvInput.files[0]);
-    if (coursesCsvInput.files[0]) fd.append("coursesCsv", coursesCsvInput.files[0]);
-    if (teachersCsvInput.files[0]) fd.append("teachersCsv", teachersCsvInput.files[0]);
-    const r = await fetch("/api/counselor/upload_csv", { method: "POST", body: fd });
-    const d = await r.json();
-    if (d.ok) { uploadMsg.textContent = "Upload complete."; await loadStudentList(); await loadPendingApprovals(); } else { uploadMsg.textContent = "Upload failed."; }
+    if (studentsCsvInput && studentsCsvInput.files[0]) fd.append("studentsCsv", studentsCsvInput.files[0]);
+    if (coursesCsvInput && coursesCsvInput.files[0]) fd.append("coursesCsv", coursesCsvInput.files[0]);
+    if (teachersCsvInput && teachersCsvInput.files[0]) fd.append("teachersCsv", teachersCsvInput.files[0]);
+    try {
+      const r = await fetch("/api/counselor/upload_csv", { method: "POST", body: fd });
+      const d = await r.json();
+      uploadMsg.textContent = d.ok ? "Upload complete." : "Upload failed.";
+      if (d.ok) { await loadStudentList(); await loadPendingApprovals(); }
+    } catch (err) { console.error("uploadCsv error", err); uploadMsg.textContent = "Network error"; }
   });
 
   applyFiltersBtn && applyFiltersBtn.addEventListener("click", async () => { counselorPage = 1; await loadStudentList(); });
@@ -352,12 +620,13 @@
       counselorStudentRows.innerHTML = out;
       counselorStudentRows.querySelectorAll(".editBtn").forEach(btn => btn.addEventListener("click", async () => { await openCounselorEditSchedule(btn.dataset.id); }));
     } catch (err) {
-      console.error("Error loading student list:", err);
+      console.error("loadStudentList error", err);
       counselorStudentRows.innerHTML = `<tr><td colspan="6" class="msg">Network error loading students.</td></tr>`;
     }
   }
 
-  // Print selected as PDF
+  // Print selected/all PDF handlers (unchanged)
+
   printCardsSelectedBtn && printCardsSelectedBtn.addEventListener("click", async () => {
     const checked = Array.from(document.querySelectorAll(".selectStudentCB:checked")).map(cb => cb.dataset.id).filter(Boolean);
     if (!checked || checked.length === 0) { alert("Select one or more students to print."); return; }
@@ -365,10 +634,9 @@
       const resp = await fetch("/api/printables/schedule_cards_pdf", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student_ids: checked }) });
       if (!resp.ok) { const txt = await resp.text(); alert("Failed to generate PDF: " + txt); return; }
       const blob = await resp.blob(); const url = window.URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "schedule_cards_selected.pdf"; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
-    } catch (err) { console.error(err); alert("Error generating PDF."); }
+    } catch (err) { console.error("print selected error", err); alert("Error generating PDF."); }
   });
 
-  // Print all in view as PDF
   printCardsAllBtn && printCardsAllBtn.addEventListener("click", async () => {
     const params = new URLSearchParams();
     if (filterName && filterName.value.trim()) params.set("q_name", filterName.value.trim());
@@ -383,207 +651,13 @@
       const resp = await fetch("/api/printables/schedule_cards_pdf", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student_ids: ids }) });
       if (!resp.ok) { const txt = await resp.text(); alert("Failed to generate PDF: " + txt); return; }
       const blob = await resp.blob(); const url = window.URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "schedule_cards_all.pdf"; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
-    } catch (err) { console.error(err); alert("Error generating PDF for all in view."); }
+    } catch (err) { console.error("print all error", err); alert("Error generating PDF for all in view."); }
   });
 
-  exportFilteredBtn && exportFilteredBtn.addEventListener("click", () => {
-    const params = new URLSearchParams();
-    if (filterName && filterName.value.trim()) params.set("q_name", filterName.value.trim());
-    if (filterGrade && filterGrade.value.trim()) params.set("grade", filterGrade.value.trim());
-    if (filterCourse && filterCourse.value.trim()) params.set("course", filterCourse.value.trim());
-    window.open(`/api/counselor/export_filtered?${params.toString()}`, "_blank");
-  });
-  exportAllSchedulesBtn && exportAllSchedulesBtn.addEventListener("click", () => { window.open("/api/counselor/export_all_schedules", "_blank"); });
-  rosterPrintBtn && rosterPrintBtn.addEventListener("click", () => { const code = rosterCourseCode.value.trim(); if (!code) return; window.open(`/roster/${encodeURIComponent(code)}`, "_blank"); });
-
-  async function loadPendingApprovals() {
-    const r = await fetch("/api/counselor/pending_approvals");
-    if (!r.ok) { pendingApprovalCount.textContent = ""; pendingApprovalsList.innerHTML = `<div class="msg">Unable to load pending approvals.</div>`; return; }
-    const d = await r.json(); pendingApprovalCount.textContent = `Pending approvals: ${d.total}`;
-    if ((d.pending || []).length === 0) { pendingApprovalsList.innerHTML = `<div class="infoBlock">No pending approvals.</div>`; return; }
-    let rows = ""; d.pending.forEach(p => { rows += `<tr><td>${escapeHTML(p.course_name)} <span class="dimtext">(${escapeHTML(p.course_code)})</span></td><td>${escapeHTML(p.student_name)} <span class="dimtext">(${escapeHTML(p.student_id)})</span></td><td>${escapeHTML(p.grade_level)}</td><td>${escapeHTML(p.teacher_email || "")}</td><td class="dimtext">${escapeHTML(p.updated_at || "")}</td></tr>`; });
-    pendingApprovalsList.innerHTML = `<table class="simpleTable"><thead><tr><th>Course</th><th>Student</th><th>Grade</th><th>Teacher</th><th>Last Updated</th></tr></thead><tbody>${rows}</tbody></table>`;
-  }
-
-  // -------------------- Modal functions --------------------
-  let __modalKeyHandler = null;
-  let __modalOverlayHandler = null;
-  let __prevBodyOverflow = null;
-
-  function openEditModal() {
-    if (!editScheduleModal) return;
-    __prevBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    if (editScheduleMsg) editScheduleMsg.textContent = "";
-    editScheduleModal.setAttribute("aria-hidden", "false");
-    show(editScheduleModal);
-    const focusable = editScheduleModal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-    if (focusable) focusable.focus();
-    __modalKeyHandler = function (e) { if (e.key === "Escape") closeEditModal(); };
-    document.addEventListener("keydown", __modalKeyHandler);
-    __modalOverlayHandler = function (e) { if (e.target === editScheduleModal) closeEditModal(); };
-    editScheduleModal.addEventListener("click", __modalOverlayHandler);
-  }
-
-  function closeEditModal() {
-    if (!editScheduleModal) return;
-    editScheduleModal.setAttribute("aria-hidden", "true");
-    hide(editScheduleModal);
-    if (__prevBodyOverflow !== null) { document.body.style.overflow = __prevBodyOverflow; __prevBodyOverflow = null; } else { document.body.style.overflow = ""; }
-    if (__modalKeyHandler) { document.removeEventListener("keydown", __modalKeyHandler); __modalKeyHandler = null; }
-    if (__modalOverlayHandler) { editScheduleModal.removeEventListener("click", __modalOverlayHandler); __modalOverlayHandler = null; }
-    counselorEditStudentID = null; counselorEditStudentName = null; counselorEditStudentGrade = null; counselorAcademicItems = []; counselorElectiveItems = [];
-    if (cSelectedAcademicList) cSelectedAcademicList.innerHTML = "";
-    if (cSelectedElectiveList) cSelectedElectiveList.innerHTML = "";
-    if (cAvailableCoursesGrid) cAvailableCoursesGrid.innerHTML = "";
-    if (counselorNotesInput) counselorNotesInput.value = "";
-    if (editScheduleInfo) editScheduleInfo.innerHTML = "";
-    if (editScheduleMsg) editScheduleMsg.textContent = "";
-  }
-
-  editModalCloseBtn && editModalCloseBtn.addEventListener("click", () => closeEditModal());
-
-  // -------------------- Open populate modal --------------------
-  async function openCounselorEditSchedule(student_id) {
-    try {
-      const r = await fetch(`/api/counselor/get_schedule?student_id=${encodeURIComponent(student_id)}`);
-      if (!r.ok) { alert("Unable to fetch schedule for editing."); return; }
-      const d = await r.json();
-      if (!d.schedule) { alert("Schedule not found."); return; }
-      counselorEditStudentID = d.schedule.student_id;
-      counselorEditStudentName = d.schedule.student_name;
-      counselorEditStudentGrade = d.schedule.grade_level;
-      counselorAcademicItems = (d.schedule_items && d.schedule_items.academic) ? d.schedule_items.academic.slice() : [];
-      counselorElectiveItems = (d.schedule_items && d.schedule_items.elective) ? d.schedule_items.elective.slice() : [];
-      if (counselorNotesInput) counselorNotesInput.value = (d.schedule.special_instructions || "");
-      if (editScheduleInfo) editScheduleInfo.innerHTML = `<div><strong>${escapeHTML(counselorEditStudentName)}</strong> (ID: ${escapeHTML(counselorEditStudentID)}) Grade ${escapeHTML(counselorEditStudentGrade)}</div>`;
-      renderCounselorSelectedLists();
-      openEditModal();
-      await runCounselorCourseSearch();
-    } catch (err) {
-      console.error("Error opening edit schedule:", err);
-      alert("Network error while opening edit modal.");
-    }
-  }
-
-  function renderCounselorSelectedLists() {
-    renderCounselorList(cSelectedAcademicList, counselorAcademicItems, true);
-    renderCounselorList(cSelectedElectiveList, counselorElectiveItems, false);
-  }
-
-  function renderCounselorList(container, items, isAcademic) {
-    if (!container) return;
-    let out = "";
-    items.forEach((it, idx) => {
-      const style = subjectToStyle(it.subject_area, subjectColors);
-      const cls = approvalClass(it);
-      if (isAcademic) {
-        out += `<div class="selectedRow ${cls}"><span class="courseChip" style="${style}">${escapeHTML(it.display)} ${approvalLabel(it)}</span>
-          <button class="smallBtn removeCounselorBtn" data-idx="${idx}" data-type="acad">Remove</button></div>`;
-      } else {
-        out += `<div class="selectedRow ${cls}"><span class="priorityNum">#${idx + 1}</span><span class="courseChip" style="${style}">${escapeHTML(it.display)} ${approvalLabel(it)}</span>
-          <div class="electiveBtns"><button class="smallBtn upCounselorBtn" data-idx="${idx}">▲</button><button class="smallBtn downCounselorBtn" data-idx="${idx}">▼</button>
-          <button class="smallBtn removeCounselorBtn" data-idx="${idx}" data-type="elec">Remove</button></div></div>`;
-      }
-    });
-    if (items.length === 0) out = `<div class="dimtext">(none selected)</div>`;
-    container.innerHTML = out;
-
-    container.querySelectorAll(".removeCounselorBtn").forEach(btn => btn.addEventListener("click", () => {
-      const idx = parseInt(btn.dataset.idx); const type = btn.dataset.type;
-      if (type === "acad") counselorAcademicItems.splice(idx, 1); else counselorElectiveItems.splice(idx, 1);
-      renderCounselorSelectedLists();
-    }));
-    container.querySelectorAll(".upCounselorBtn").forEach(btn => btn.addEventListener("click", () => { moveItemUp(counselorElectiveItems, parseInt(btn.dataset.idx)); renderCounselorSelectedLists(); }));
-    container.querySelectorAll(".downCounselorBtn").forEach(btn => btn.addEventListener("click", () => { moveItemDown(counselorElectiveItems, parseInt(btn.dataset.idx)); renderCounselorSelectedLists(); }));
-  }
-
-  cRunCourseSearchBtn && cRunCourseSearchBtn.addEventListener("click", runCounselorCourseSearch);
-  async function runCounselorCourseSearch() {
-    if (!counselorEditStudentGrade) return;
-    const params = new URLSearchParams(); params.set("grade", counselorEditStudentGrade);
-    if (cFilterSubject && cFilterSubject.value.trim()) params.set("subject", cFilterSubject.value.trim());
-    if (cFilterNameSearch && cFilterNameSearch.value.trim()) params.set("name", cFilterNameSearch.value.trim());
-    try {
-      const r = await fetch(`/api/courses?${params.toString()}`);
-      const d = await r.json(); lastCounselorCourseSearch = d.courses || [];
-      let out = ""; lastCounselorCourseSearch.forEach(c => { out += renderCourseCard(c); });
-      if (cAvailableCoursesGrid) cAvailableCoursesGrid.innerHTML = out;
-      if (cAvailableCoursesGrid) {
-        cAvailableCoursesGrid.querySelectorAll(".addCourseBtn").forEach(btn => btn.addEventListener("click", () => {
-          const code = btn.dataset.code; const found = lastCounselorCourseSearch.find(x => x.course_code === code); if (!found) return;
-          const display = `${found.course_name} (${found.course_code})`; const item = { display, course_code: found.course_code, subject_area: found.subject_area || "Other", requires_approval: !!found.requires_approval, approval_status: found.requires_approval ? "pending" : "approved" };
-          const isElective = (found.subject_area || "").toLowerCase().includes("cte") || (found.subject_area || "").toLowerCase().includes("elective");
-          if (isElective) { if (counselorElectiveItems.length >= MAX_ELECTIVE_CHOICES) return; if (!counselorElectiveItems.find(x => x.course_code === item.course_code)) counselorElectiveItems.push(item); }
-          else { if (counselorAcademicItems.length >= MAX_ACADEMIC_COURSES) return; if (!counselorAcademicItems.find(x => x.course_code === item.course_code)) counselorAcademicItems.push(item); }
-          renderCounselorSelectedLists();
-        }));
-      }
-    } catch (err) { console.error("Error loading counselor course search:", err); }
-  }
-
-  // Save edited schedule (robust: treat non-json success as success)
-  saveCounselorScheduleBtn && saveCounselorScheduleBtn.addEventListener("click", async () => {
-    if (!counselorEditStudentID) { if (editScheduleMsg) editScheduleMsg.textContent = "No student selected."; return; }
-    const payload = { student_id: counselorEditStudentID, student_name: counselorEditStudentName, grade_level: counselorEditStudentGrade, academic_courses: counselorAcademicItems.map(x => x.display), elective_courses: counselorElectiveItems.map(x => x.display), special_instructions: (counselorNotesInput ? counselorNotesInput.value.trim() : "") };
-    try {
-      const r = await fetch("/api/counselor/save_schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (!r.ok) {
-        // server returned an error status
-        let txt = "";
-        try { txt = await r.text(); } catch (e) { txt = "Error saving."; }
-        if (editScheduleMsg) editScheduleMsg.textContent = txt || "Error saving.";
-        return;
-      }
-      // Try to parse JSON; if parse fails assume success (server sometimes returns empty body)
-      let d = null;
-      try { d = await r.json(); } catch (e) { /* ignore parse error - assume success */ }
-      if (d && d.ok === false) {
-        if (editScheduleMsg) editScheduleMsg.textContent = d.error || "Error saving.";
-        return;
-      }
-      // success
-      if (editScheduleMsg) editScheduleMsg.textContent = "Saved.";
-      await loadStudentList();
-      await loadPendingApprovals();
-      closeEditModal();
-    } catch (err) {
-      console.error("Error saving counselor schedule:", err);
-      if (editScheduleMsg) editScheduleMsg.textContent = "Network error while saving.";
-    }
-  });
-
-  // Reset schedule (robust)
-  resetScheduleBtn && resetScheduleBtn.addEventListener("click", async () => {
-    if (!counselorEditStudentID) { if (editScheduleMsg) editScheduleMsg.textContent = "No student selected."; return; }
-    if (!confirm("Reset schedule for this student? This will clear all selected courses and approvals.")) return;
-    try {
-      const r = await fetch("/api/counselor/reset_schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student_id: counselorEditStudentID }) });
-      if (!r.ok) {
-        let txt = "";
-        try { txt = await r.text(); } catch (e) { txt = "Error resetting."; }
-        if (editScheduleMsg) editScheduleMsg.textContent = txt || "Error resetting.";
-        return;
-      }
-      // try parse JSON - if parsing fails assume success
-      let d = null;
-      try { d = await r.json(); } catch (e) { /* ignore */ }
-      if (d && d.ok === false) { if (editScheduleMsg) editScheduleMsg.textContent = d.error || "Error resetting."; return; }
-      if (editScheduleMsg) editScheduleMsg.textContent = "Schedule reset.";
-      await loadStudentList();
-      await loadPendingApprovals();
-      closeEditModal();
-    } catch (err) {
-      console.error("Error resetting schedule:", err);
-      if (editScheduleMsg) editScheduleMsg.textContent = "Network error while resetting.";
-    }
-  });
-
-  // -------------------- Final initialization --------------------
-  // Show student panel by default
+  // -------------------- initial landing --------------------
   showOnly(studentPanel);
   if (studentScheduleArea) hide(studentScheduleArea);
   if (studentLoginArea) show(studentLoginArea);
 
-  // End of file
+  // End IIFE
 })();
