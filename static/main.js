@@ -583,13 +583,18 @@ async function loadTeacherRoster(){
     const c = b.course;
     const style = subjectToStyle(c.subject_area || "Other", subjectColors);
     out += `
-      <div class="teacherCourseBlock">
+      <div class="teacherCourseBlock course-block" data-course-code="${escapeHTML(c.course_code)}">
         <div class="teacherCourseHeader">
           <div>
             <div class="teacherCourseTitle">${escapeHTML(c.course_name)} <span class="dimtext">(${escapeHTML(c.course_code)})</span></div>
             <div class="dimtext">
               <span class="coursePill" style="${style}">${escapeHTML(c.subject_area || "Other")}</span>
               ${c.requires_approval ? `<span class="approvalTag tagPending">Requires Approval</span>` : `<span class="dimtext">No approvals required</span>`}
+            </div>
+            <div style="margin-top: 8px;">
+              <strong>Description:</strong>
+              <span class="course-description">${escapeHTML(c.description || "No description yet.")}</span>
+              <button class="smallBtn edit-course-desc" style="margin-left: 8px;">Edit description</button>
             </div>
           </div>
         </div>
