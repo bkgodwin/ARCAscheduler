@@ -2,9 +2,13 @@
 
 {% block body %}
 <header class="topbar">
-  <div class="brand">
-    <div class="brandTitle">Scheduling</div>
-    <div class="brandSub">Self-hosted course request + approvals</div>
+  <div class="brand" style="display:flex;align-items:center;">
+    <!-- Place an icon image at /static/img/icon.png (see instructions below) -->
+    <img src="/static/img/icon.png" alt="School logo" class="brandIcon" style="width:42px;height:42px;margin-right:10px;border-radius:6px;object-fit:cover;"/>
+    <div>
+      <div class="brandTitle">Acadiana Renaissance Charter Academy Internal Scheduling Tool</div>
+      <div class="brandSub">Strong Minds - Good Hearts</div>
+    </div>
   </div>
   <div class="modeButtons">
     <button id="studentModeBtn" class="modeBtn">Student</button>
@@ -26,6 +30,4 @@
   const MAX_ELECTIVE_CHOICES = {{ max_elective|int }};
 </script>
 <script src="/static/main.js"></script>
-<!-- teacher description editor (adds editing behavior to course blocks) -->
-<script src="/static/teacher-description.js"></script>
 {% endblock %}
