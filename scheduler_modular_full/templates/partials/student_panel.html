@@ -1,0 +1,85 @@
+<section id="studentPanel" class="panel">
+  <h2>Student Scheduling</h2>
+
+  <div id="studentLoginArea" class="card">
+    <h3>Find your name</h3>
+    <div class="row">
+      <label>
+        Name
+        <input id="studentNameInput" type="text" placeholder="Start typing your name..." autocomplete="off"/>
+      </label>
+      <div id="studentNameDropdown" class="autocomplete"></div>
+    </div>
+    <div class="row">
+      <label>
+        Student ID (to confirm)
+        <input id="studentIdCheckInput" type="password" placeholder="Enter your ID number"/>
+      </label>
+    </div>
+    <div class="row">
+      <button id="studentLoginBtn">Continue</button>
+    </div>
+    <div id="studentLoginMsg" class="msg"></div>
+  </div>
+
+  <div id="studentScheduleArea" class="card" style="display:none;">
+    <div class="row spaceBetween">
+      <div id="studentInfoBlock"></div>
+      <div class="rightActions">
+        <a id="studentCardLink" class="buttonlike" href="#" target="_blank">Open Schedule Card</a>
+        <button id="studentSignOutBtn" class="danger">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="subcard">
+        <h3>Selected Academic Courses (up to <span id="maxAcademicSpan"></span>)</h3>
+        <div id="selectedAcademicList"></div>
+      </div>
+
+      <div class="subcard">
+        <h3>Elective / CTE Priorities (up to <span id="maxElectiveSpan"></span>)</h3>
+        <div id="selectedElectiveList"></div>
+      </div>
+    </div>
+
+    <div class="subcard">
+      <h3>Special Instructions (optional)</h3>
+      <textarea id="specialInstructionsInput" rows="3" placeholder="Add any notes for the counselor..."></textarea>
+    </div>
+
+    <div class="row">
+      <button id="studentSaveBtn">Submit / Save Schedule</button>
+      <div id="studentSaveMsg" class="msg"></div>
+    </div>
+
+    <div class="subcard">
+      <h3>Available Courses</h3>
+      <div class="row">
+        <label>
+          Subject/Area
+          <select id="studentFilterSubject">
+            <option value="">All</option>
+            <option value="ELA">ELA</option>
+            <option value="Math">Math</option>
+            <option value="Science">Science</option>
+            <option value="Social Studies">Social Studies</option>
+            <option value="PE/Health">PE/Health</option>
+            <option value="CTE">CTE</option>
+            <option value="Elective">Elective</option>
+            <option value="Other">Other</option>
+          </select>
+        </label>
+
+        <label>
+          Search
+          <input id="studentFilterName" type="text" placeholder="Search by name or code"/>
+        </label>
+
+        <button id="studentRunCourseSearchBtn">Search</button>
+      </div>
+
+      <div id="studentAvailableCourses" class="availableCoursesGrid"></div>
+    </div>
+  </div>
+</section>
