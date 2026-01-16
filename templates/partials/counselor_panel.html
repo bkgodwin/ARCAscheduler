@@ -1,6 +1,5 @@
 <section id="counselorPanel" class="panel" style="display:none;">
   <h2>Counselor Dashboard</h2>
-
   <div id="counselorLoginArea" class="card">
     <h3>Counselor Sign In</h3>
     <div class="row">
@@ -83,9 +82,27 @@
         <button id="exportAllSchedulesBtn">Export All Schedules</button>
       </div>
 
-      <div id="studentCount" class="countBadge"></div>
+      <div class="row wrap" style="align-items:center;margin-top:8px;">
+        <div id="studentCount" class="countBadge" style="margin-right:12px;"></div>
 
-      <table class="simpleTable">
+        <label style="margin-right:8px;">Show
+          <select id="perPageSelect">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="all">All</option>
+          </select>
+        </label>
+
+        <div id="paginationControls" class="paginationControls" style="display:inline-flex;align-items:center;margin-left:12px;">
+          <button id="pagePrevBtn" class="smallBtn" style="margin-right:6px;">Prev</button>
+          <span id="pageInfo" class="dimtext">Page 1</span>
+          <button id="pageNextBtn" class="smallBtn" style="margin-left:6px;">Next</button>
+        </div>
+      </div>
+
+      <table class="simpleTable" style="margin-top:8px;">
         <thead>
           <tr>
             <th>Select</th>
@@ -99,55 +116,11 @@
         <tbody id="counselorStudentRows"></tbody>
       </table>
 
-      <div class="row wrap">
+      <div class="row wrap" style="margin-top:8px;">
         <button id="printCardsSelectedBtn">Print Cards (Selected)</button>
+        <button id="printCardsAllBtn">Print Cards (All in view)</button>
         <label>Roster by Course Code <input id="rosterCourseCode" type="text" placeholder="ex: BIO"/></label>
         <button id="rosterPrintBtn">Print Roster</button>
-      </div>
-    </div>
-
-    <div class="subcard">
-      <h3>Awaiting Teacher Approval</h3>
-      <div class="infoBlock">Pending approvals across all courses requiring teacher approval.</div>
-      <div id="pendingApprovalCount" class="countBadge"></div>
-      <div id="pendingApprovalsList"></div>
-    </div>
-
-    <div id="editScheduleArea" class="subcard" style="display:none;">
-      <h3>Edit Student Schedule</h3>
-      <div id="editScheduleInfo" class="infoBlock"></div>
-
-      <div class="grid2">
-        <div class="subcard">
-          <h4>Selected Academic (up to <span id="cMaxAcademicSpan"></span>)</h4>
-          <div id="cSelectedAcademicList"></div>
-        </div>
-        <div class="subcard">
-          <h4>Elective / CTE Priorities (up to <span id="cMaxElectiveSpan"></span>)</h4>
-          <div id="cSelectedElectiveList"></div>
-        </div>
-      </div>
-
-      <div class="subcard">
-        <h4>Special Instructions</h4>
-        <textarea id="counselorNotesInput" rows="3"></textarea>
-      </div>
-
-      <div class="row wrap">
-        <button id="saveCounselorScheduleBtn">Save</button>
-        <button id="resetScheduleBtn" class="danger">Reset Schedule</button>
-        <button id="deleteStudentBtn" class="danger">Delete Student</button>
-        <div id="editScheduleMsg" class="msg"></div>
-      </div>
-
-      <div class="subcard">
-        <h4>Add Courses</h4>
-        <div class="row wrap">
-          <label>Subject <input id="cFilterSubject" type="text" placeholder="ex: Science"/></label>
-          <label>Search <input id="cFilterNameSearch" type="text" placeholder="ex: BIO"/></label>
-          <button id="cRunCourseSearchBtn">Search</button>
-        </div>
-        <div id="cAvailableCoursesGrid" class="availableCoursesGrid"></div>
       </div>
     </div>
   </div>

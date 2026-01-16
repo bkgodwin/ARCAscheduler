@@ -1,3 +1,4 @@
+# Modified counselor route to support server-side pagination for student list
 from flask import Blueprint, request, jsonify, session
 
 from config import COUNSELOR_PASSWORD, DEFAULT_SUBJECT_COLORS, MAX_ACADEMIC_COURSES, MAX_ELECTIVE_CHOICES
@@ -229,12 +230,41 @@ def counselor_update_course():
 
 @bp_counselor.get("/api/counselor/students")
 def counselor_students():
+    """
+    Supports pagination via query params:
+      - page (int) default 1
+      - per_page (int or 'all') default 50
+    Filtering is unchanged (q_name, grade, course).
+    Response includes: { total, page, per_page, students: [...] }
+    """
     if not is_counselor():
         return jsonify({"error": "not_authorized"}), 403
 
     q_name = (request.args.get("q_name", "") or "").strip().lower()
     q_grade = (request.args.get("grade", "") or "").strip()
     q_course = (request.args.get("course", "") or "").strip().lower()
+
+    # pagination params
+    page_raw = request.args.get("page", "1")
+    per_page_raw = request.args.get("per_page", "50")
+
+    try:
+        page = int(page_raw)
+        if page < 1:
+            page = 1
+    except Exception:
+        page = 1
+
+    per_page = None
+    if str(per_page_raw).lower() == "all":
+        per_page = "all"
+    else:
+        try:
+            per_page = int(per_page_raw)
+            if per_page <= 0:
+                per_page = 50
+        except Exception:
+            per_page = 50
 
     studs = read_students()
     sched_map = {s["student_id"]: s for s in read_schedules()}
@@ -286,7 +316,20 @@ def counselor_students():
                 tmp.append(r)
         out = tmp
 
-    return jsonify({"total": len(out), "students": out})
+    total = len(out)
+
+    # apply pagination
+    if per_page == "all":
+        students_page = out
+        per_page_val = "all"
+        page = 1
+    else:
+        per_page_val = int(per_page)
+        start = (page - 1) * per_page_val
+        end = start + per_page_val
+        students_page = out[start:end]
+
+    return jsonify({"total": total, "page": page, "per_page": per_page_val, "students": students_page})
 
 
 @bp_counselor.get("/api/counselor/pending_approvals")
