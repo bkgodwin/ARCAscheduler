@@ -127,21 +127,21 @@
   </div>
 
   <!-- Modal overlay for editing a student's schedule -->
-  <div id="editScheduleModal" class="modal" style="display:none;position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;">
-    <div class="modalInner" style="max-width:960px;margin:40px auto;background:#fff;border-radius:8px;padding:18px;position:relative;box-shadow:0 6px 20px rgba(0,0,0,0.4);">
-      <button id="editModalCloseBtn" class="smallBtn" style="position:absolute;right:12px;top:12px;">Close</button>
-      <h3>Edit Student Schedule</h3>
+  <div id="editScheduleModal" class="modal" aria-hidden="true" style="display:none;">
+    <div class="modalInner" role="dialog" aria-modal="true" aria-labelledby="editScheduleTitle">
+      <button id="editModalCloseBtn" class="modalClose smallBtn" aria-label="Close">✕</button>
+      <h3 id="editScheduleTitle">Edit Student Schedule</h3>
       <div id="editScheduleInfo" class="infoBlock" style="margin-bottom:8px;"></div>
 
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
         <div style="flex:1 1 320px;">
           <h4>Selected Academic (up to <span id="cMaxAcademicSpan"></span>)</h4>
-          <div id="cSelectedAcademicList" style="min-height:80px;border:1px solid #eee;padding:8px;border-radius:4px;"></div>
+          <div id="cSelectedAcademicList" class="modalList"></div>
         </div>
 
         <div style="flex:1 1 320px;">
           <h4>Elective / CTE Priorities (up to <span id="cMaxElectiveSpan"></span>)</h4>
-          <div id="cSelectedElectiveList" style="min-height:80px;border:1px solid #eee;padding:8px;border-radius:4px;"></div>
+          <div id="cSelectedElectiveList" class="modalList"></div>
         </div>
       </div>
 
@@ -168,4 +168,72 @@
       </div>
     </div>
   </div>
+
+  <style>
+    /* Modal styles: adapt to dark/light using CSS variables where possible */
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(2,6,23,0.65); /* semi-transparent overlay */
+      z-index: 9999;
+      padding: 20px;
+    }
+
+    .modal[aria-hidden="true"] {
+      display: none;
+    }
+
+    .modalInner {
+      width: 100%;
+      max-width: 1000px;
+      max-height: calc(100vh - 80px);
+      overflow: auto;
+      background: var(--modal-background, #0b1220); /* dark by default */
+      color: var(--modal-foreground, #e6eef8);
+      border-radius: 10px;
+      padding: 18px;
+      box-shadow: 0 8px 30px rgba(2,6,23,0.7);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    /* light-mode fallback if body has data-theme="light" or similar */
+    body[data-theme="light"] .modalInner {
+      background: #fff;
+      color: #111827;
+      border: 1px solid rgba(0,0,0,0.08);
+    }
+
+    .modalInner .modalClose {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      background: transparent;
+      color: inherit;
+      border: none;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    .modalList {
+      min-height: 80px;
+      border: 1px solid rgba(255,255,255,0.04);
+      padding: 8px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .modalList .selectedRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 4px;
+      border-bottom: 1px dashed rgba(255,255,255,0.02);
+    }
+
+    .modalInner::-webkit-scrollbar { width: 10px; height: 10px; }
+    .modalInner::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 8px; }
+  </style>
 </section>
