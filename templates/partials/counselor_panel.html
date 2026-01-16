@@ -180,17 +180,13 @@
       z-index: 9999;
       padding: 20px;
     }
-
-    .modal[aria-hidden="true"] {
-      display: none;
-    }
-
+    .modal[aria-hidden="true"] { display: none; }
     .modalInner {
       width: 100%;
       max-width: 1000px;
       max-height: calc(100vh - 80px);
       overflow: auto;
-      background: var(--modal-background, #0b1220); /* dark by default */
+      background: var(--modal-background, #0b1220);
       color: var(--modal-foreground, #e6eef8);
       border-radius: 10px;
       padding: 18px;
@@ -198,41 +194,10 @@
       border: 1px solid rgba(255,255,255,0.06);
       position: relative;
     }
-
-    /* light-mode fallback if body has data-theme="light" or similar */
-    body[data-theme="light"] .modalInner {
-      background: #fff;
-      color: #111827;
-      border: 1px solid rgba(0,0,0,0.08);
-    }
-
-    .modalInner .modalClose {
-      position: absolute;
-      right: 12px;
-      top: 12px;
-      background: transparent;
-      color: inherit;
-      border: none;
-      font-size: 1rem;
-      cursor: pointer;
-    }
-
-    .modalList {
-      min-height: 80px;
-      border: 1px solid rgba(255,255,255,0.04);
-      padding: 8px;
-      border-radius: 4px;
-      background: rgba(255,255,255,0.02);
-    }
-
-    .modalList .selectedRow {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 6px 4px;
-      border-bottom: 1px dashed rgba(255,255,255,0.02);
-    }
-
+    body[data-theme="light"] .modalInner { background: #fff; color: #111827; border: 1px solid rgba(0,0,0,0.08); }
+    .modalInner .modalClose { position: absolute; right: 12px; top: 12px; background: transparent; color: inherit; border: none; font-size: 1rem; cursor: pointer; }
+    .modalList { min-height: 80px; border: 1px solid rgba(255,255,255,0.04); padding: 8px; border-radius: 4px; background: rgba(255,255,255,0.02); }
+    .modalList .selectedRow { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px; border-bottom: 1px dashed rgba(255,255,255,0.02); }
     .modalInner::-webkit-scrollbar { width: 10px; height: 10px; }
     .modalInner::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 8px; }
   </style>
