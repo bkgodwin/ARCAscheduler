@@ -133,11 +133,16 @@
   const editScheduleModal = $id("editScheduleModal");
   const editModalCloseBtn = $id("editModalCloseBtn");
   const editScheduleInfo = $id("editScheduleInfo");
+  const reviewStatusIndicator = $id("reviewStatusIndicator");
   const cSelectedAcademicList = $id("cSelectedAcademicList");
   const cSelectedElectiveList = $id("cSelectedElectiveList");
   const counselorNotesInput = $id("counselorNotesInput");
   const saveCounselorScheduleBtn = $id("saveCounselorScheduleBtn");
+  const signOffScheduleBtn = $id("signOffScheduleBtn");
   const resetScheduleBtn = $id("resetScheduleBtn");
+  const previousStudentBtn = $id("previousStudentBtn");
+  const nextStudentBtn = $id("nextStudentBtn");
+  const navigationMsg = $id("navigationMsg");
   const cFilterSubject = $id("cFilterSubject");
   const cFilterNameSearch = $id("cFilterNameSearch");
   const cRunCourseSearchBtn = $id("cRunCourseSearchBtn");
@@ -148,6 +153,7 @@
   const pagePrevBtn = $id("pagePrevBtn");
   const pageNextBtn = $id("pageNextBtn");
   const pageInfo = $id("pageInfo");
+  const editScheduleMsg = $id("editScheduleMsg");
 
   // state
   let subjectColors = {};
@@ -161,6 +167,9 @@
   let counselorEditStudentGrade = null;
   let counselorAcademicItems = [];
   let counselorElectiveItems = [];
+  let counselorEditReviewed = false;
+  let counselorHasUnsavedChanges = false;
+  let counselorOriginalScheduleState = null;
 
   let lastStudentCourseSearch = [];
   let lastCounselorCourseSearch = [];
@@ -576,7 +585,15 @@
       }
       let out = "";
       (students || []).forEach(stu => {
-        const rowClass = stu.scheduled ? "studentRowScheduled" : "studentRowNotScheduled";
+        // Determine row class based on schedule status
+        let rowClass = "studentRowNotScheduled";
+        if (stu.scheduled) {
+          if (stu.reviewed) {
+            rowClass = "studentRowReviewed";  // Blue for reviewed
+          } else {
+            rowClass = "studentRowScheduled";  // Green for scheduled but not reviewed
+          }
+        }
         let chipsHTML = "";
         (stu.academic_courses || []).slice(0, 2).forEach(cn => { chipsHTML += `<span class="courseChip" style="${subjectToStyle("Other", subjectColors)}">${escapeHTML(cn)}</span> `; });
         if ((stu.academic_courses || []).length > 2) chipsHTML += `<span class="courseChip" style="${subjectToStyle("Other", subjectColors)}">+${(stu.academic_courses || []).length - 2} more</span>`;
@@ -681,15 +698,48 @@
     if (__modalKeyHandler) { document.removeEventListener("keydown", __modalKeyHandler); __modalKeyHandler = null; }
     if (__modalOverlayHandler) { editScheduleModal.removeEventListener("click", __modalOverlayHandler); __modalOverlayHandler = null; }
     counselorEditStudentID = null; counselorEditStudentName = null; counselorEditStudentGrade = null; counselorAcademicItems = []; counselorElectiveItems = [];
+    counselorEditReviewed = false; counselorHasUnsavedChanges = false; counselorOriginalScheduleState = null;
     if (cSelectedAcademicList) cSelectedAcademicList.innerHTML = "";
     if (cSelectedElectiveList) cSelectedElectiveList.innerHTML = "";
     if (cAvailableCoursesGrid) cAvailableCoursesGrid.innerHTML = "";
     if (counselorNotesInput) counselorNotesInput.value = "";
     if (editScheduleInfo) editScheduleInfo.innerHTML = "";
     if (editScheduleMsg) editScheduleMsg.textContent = "";
+    if (reviewStatusIndicator) reviewStatusIndicator.innerHTML = "";
+    if (navigationMsg) navigationMsg.textContent = "";
   }
 
   editModalCloseBtn && editModalCloseBtn.addEventListener("click", () => closeEditModal());
+
+  function updateReviewStatusIndicator() {
+    if (!reviewStatusIndicator) return;
+    if (counselorEditReviewed) {
+      reviewStatusIndicator.innerHTML = `<strong style="color:var(--approved);">✓ This schedule has been reviewed and signed off.</strong>`;
+      reviewStatusIndicator.style.background = "rgba(34,197,94,0.1)";
+      reviewStatusIndicator.style.border = "1px solid rgba(34,197,94,0.3)";
+    } else {
+      reviewStatusIndicator.innerHTML = `<strong style="color:var(--pending);">⚠ This schedule is pending review.</strong>`;
+      reviewStatusIndicator.style.background = "rgba(250,204,21,0.1)";
+      reviewStatusIndicator.style.border = "1px solid rgba(250,204,21,0.3)";
+    }
+  }
+
+  function checkForUnsavedChanges() {
+    if (!counselorOriginalScheduleState) return;
+    const currentState = JSON.stringify({
+      academic: counselorAcademicItems.map(x => x.display),
+      elective: counselorElectiveItems.map(x => x.display),
+      notes: counselorNotesInput ? counselorNotesInput.value.trim() : ""
+    });
+    counselorHasUnsavedChanges = (currentState !== counselorOriginalScheduleState);
+    
+    // Highlight the modal if there are unsaved changes
+    if (counselorHasUnsavedChanges && editScheduleModal) {
+      editScheduleModal.querySelector(".modalInner").style.boxShadow = "0 0 0 3px rgba(250,204,21,0.3)";
+    } else if (editScheduleModal) {
+      editScheduleModal.querySelector(".modalInner").style.boxShadow = "";
+    }
+  }
 
   async function openCounselorEditSchedule(student_id) {
     try {
@@ -702,8 +752,22 @@
       counselorEditStudentGrade = d.schedule.grade_level;
       counselorAcademicItems = (d.schedule_items && d.schedule_items.academic) ? d.schedule_items.academic.slice() : [];
       counselorElectiveItems = (d.schedule_items && d.schedule_items.elective) ? d.schedule_items.elective.slice() : [];
+      counselorEditReviewed = d.schedule.reviewed || false;
+      counselorHasUnsavedChanges = false;
+      
+      // Store original state for change detection
+      counselorOriginalScheduleState = JSON.stringify({
+        academic: counselorAcademicItems.map(x => x.display),
+        elective: counselorElectiveItems.map(x => x.display),
+        notes: d.schedule.special_instructions || ""
+      });
+      
       if (counselorNotesInput) counselorNotesInput.value = (d.schedule.special_instructions || "");
       if (editScheduleInfo) editScheduleInfo.innerHTML = `<div><strong>${escapeHTML(counselorEditStudentName)}</strong> (ID: ${escapeHTML(counselorEditStudentID)}) Grade ${escapeHTML(counselorEditStudentGrade)}</div>`;
+      
+      // Update review status indicator
+      updateReviewStatusIndicator();
+      
       renderCounselorSelectedLists();
       openEditModal();
       await runCounselorCourseSearch();
@@ -713,6 +777,7 @@
   function renderCounselorSelectedLists() {
     renderCounselorList(cSelectedAcademicList, counselorAcademicItems, true);
     renderCounselorList(cSelectedElectiveList, counselorElectiveItems, false);
+    checkForUnsavedChanges();
   }
 
   function renderCounselorList(container, items, isAcademic) {
@@ -787,6 +852,101 @@
       await loadStudentList(); await loadPendingApprovals(); closeEditModal();
     } catch (err) { console.error("resetSchedule error", err); if (editScheduleMsg) editScheduleMsg.textContent = "Network error while resetting."; }
   });
+
+  // Sign Off button handler
+  signOffScheduleBtn && signOffScheduleBtn.addEventListener("click", async () => {
+    if (!counselorEditStudentID) { if (editScheduleMsg) editScheduleMsg.textContent = "No student selected."; return; }
+    
+    if (counselorHasUnsavedChanges) {
+      if (!confirm("You have unsaved changes. Save them before signing off?")) return;
+      // Save first
+      const payload = { student_id: counselorEditStudentID, student_name: counselorEditStudentName, grade_level: counselorEditStudentGrade, academic_courses: counselorAcademicItems.map(x => x.display), elective_courses: counselorElectiveItems.map(x => x.display), special_instructions: (counselorNotesInput ? counselorNotesInput.value.trim() : "") };
+      try {
+        const r = await fetch("/api/counselor/save_schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (!r.ok) { if (editScheduleMsg) editScheduleMsg.textContent = "Error saving before sign-off."; return; }
+      } catch (err) { console.error("save before sign-off error", err); if (editScheduleMsg) editScheduleMsg.textContent = "Network error."; return; }
+    }
+    
+    try {
+      const r = await fetch("/api/counselor/sign_off_schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student_id: counselorEditStudentID }) });
+      if (!r.ok) { const txt = await r.text(); if (editScheduleMsg) editScheduleMsg.textContent = txt || "Error signing off."; return; }
+      const d = await r.json();
+      if (!d.ok) { if (editScheduleMsg) editScheduleMsg.textContent = d.error || "Error signing off."; return; }
+      
+      if (editScheduleMsg) editScheduleMsg.textContent = "Signed off successfully!";
+      counselorEditReviewed = true;
+      updateReviewStatusIndicator();
+      await loadStudentList();
+      
+      // Auto-progression: open next student
+      setTimeout(async () => {
+        const nextId = await getNextStudentInList(counselorEditStudentID);
+        if (nextId) {
+          await openCounselorEditSchedule(nextId);
+        } else {
+          if (navigationMsg) navigationMsg.textContent = "No more students to review.";
+          setTimeout(() => closeEditModal(), 1500);
+        }
+      }, 1000);
+    } catch (err) { console.error("signOffSchedule error", err); if (editScheduleMsg) editScheduleMsg.textContent = "Network error while signing off."; }
+  });
+
+  // Check for changes when notes are edited
+  counselorNotesInput && counselorNotesInput.addEventListener("input", checkForUnsavedChanges);
+
+  // Navigation button handlers
+  previousStudentBtn && previousStudentBtn.addEventListener("click", async () => {
+    if (!counselorEditStudentID) return;
+    if (counselorHasUnsavedChanges && !confirm("You have unsaved changes. Continue without saving?")) return;
+    const prevId = await getPreviousStudentInList(counselorEditStudentID);
+    if (prevId) {
+      await openCounselorEditSchedule(prevId);
+      if (navigationMsg) navigationMsg.textContent = "";
+    } else {
+      if (navigationMsg) navigationMsg.textContent = "Already at first student.";
+    }
+  });
+
+  nextStudentBtn && nextStudentBtn.addEventListener("click", async () => {
+    if (!counselorEditStudentID) return;
+    if (counselorHasUnsavedChanges && !confirm("You have unsaved changes. Continue without saving?")) return;
+    const nextId = await getNextStudentInList(counselorEditStudentID);
+    if (nextId) {
+      await openCounselorEditSchedule(nextId);
+      if (navigationMsg) navigationMsg.textContent = "";
+    } else {
+      if (navigationMsg) navigationMsg.textContent = "Already at last student.";
+    }
+  });
+
+  // Helper functions for navigation
+  async function getNextStudentInList(currentId) {
+    try {
+      const payload = {
+        student_id: currentId,
+        q_name: filterName ? filterName.value.trim() : "",
+        q_grade: filterGrade ? filterGrade.value.trim() : "",
+        q_course: filterCourse ? filterCourse.value.trim() : ""
+      };
+      const r = await fetch("/api/counselor/get_next_student", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const d = await r.json();
+      return d.ok ? d.next_student_id : null;
+    } catch (err) { console.error("getNextStudentInList error", err); return null; }
+  }
+
+  async function getPreviousStudentInList(currentId) {
+    try {
+      const payload = {
+        student_id: currentId,
+        q_name: filterName ? filterName.value.trim() : "",
+        q_grade: filterGrade ? filterGrade.value.trim() : "",
+        q_course: filterCourse ? filterCourse.value.trim() : ""
+      };
+      const r = await fetch("/api/counselor/get_previous_student", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const d = await r.json();
+      return d.ok ? d.previous_student_id : null;
+    } catch (err) { console.error("getPreviousStudentInList error", err); return null; }
+  }
 
   // initial landing
   showOnly(studentPanel);
