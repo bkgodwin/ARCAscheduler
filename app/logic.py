@@ -67,6 +67,9 @@ def upsert_schedule(
             row["academic_courses"] = list(academic_list)[:MAX_ACADEMIC_COURSES]
             row["elective_courses"] = list(elective_list)[:MAX_ELECTIVE_CHOICES]
             row["special_instructions"] = (special_instructions or "").strip()
+            # Preserve reviewed status but don't overwrite it here
+            if "reviewed" not in row:
+                row["reviewed"] = False
             found = True
             break
 
@@ -79,6 +82,7 @@ def upsert_schedule(
                 "academic_courses": list(academic_list)[:MAX_ACADEMIC_COURSES],
                 "elective_courses": list(elective_list)[:MAX_ELECTIVE_CHOICES],
                 "special_instructions": (special_instructions or "").strip(),
+                "reviewed": False,
             }
         )
 
@@ -206,3 +210,70 @@ def approval_counts_for_student(student_id: str, sched_obj: dict):
             rejected += 1
 
     return pending, rejected
+
+
+def mark_schedule_reviewed(student_id: str, reviewed: bool = True):
+    """Mark a student's schedule as reviewed (signed off) or not reviewed."""
+    scheds = read_schedules()
+    for row in scheds:
+        if row["student_id"] == student_id:
+            row["reviewed"] = reviewed
+            break
+    write_schedules(scheds)
+
+
+def get_student_list_with_filters(q_name="", q_grade="", q_course=""):
+    """Get filtered student list matching the counselor's current filters."""
+    studs = read_students()
+    sched_map = {s["student_id"]: s for s in read_schedules()}
+
+    out = []
+    for stu in studs:
+        sid = stu["student_id"]
+        sched = sched_map.get(sid)
+
+        academic = []
+        elective = []
+        if sched:
+            academic = sched["academic_courses"]
+            elective = sched["elective_courses"]
+
+        # Apply filters
+        if q_name and q_name.lower() not in stu["student_name"].lower():
+            continue
+        if q_grade and stu["grade_level"] != q_grade:
+            continue
+        if q_course:
+            hay = " ".join(academic + elective).lower()
+            if q_course.lower() not in hay:
+                continue
+
+        out.append(
+            {
+                "student_id": sid,
+                "student_name": stu["student_name"],
+                "grade_level": stu["grade_level"],
+            }
+        )
+
+    return out
+
+
+def get_next_student_id(current_id: str, student_list):
+    """Get the next student ID in the list after current_id."""
+    for i, student in enumerate(student_list):
+        if student["student_id"] == current_id:
+            if i + 1 < len(student_list):
+                return student_list[i + 1]["student_id"]
+            return None
+    return None
+
+
+def get_previous_student_id(current_id: str, student_list):
+    """Get the previous student ID in the list before current_id."""
+    for i, student in enumerate(student_list):
+        if student["student_id"] == current_id:
+            if i > 0:
+                return student_list[i - 1]["student_id"]
+            return None
+    return None

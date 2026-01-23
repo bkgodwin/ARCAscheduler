@@ -15,7 +15,7 @@
   <div id="counselorDashboard" class="card" style="display:none;">
     <div class="row spaceBetween">
       <div class="infoBlock">
-        Use filters to find students. Students who have saved a schedule are highlighted green, others red.
+        Use filters to find students. Students who have saved a schedule are highlighted green, those with reviewed schedules are blue, others red.
       </div>
       <button id="logoutCounselorBtn" class="danger" style="display:none;">Sign Out</button>
     </div>
@@ -130,8 +130,11 @@
   <div id="editScheduleModal" class="modal" aria-hidden="true" style="display:none;">
     <div class="modalInner" role="dialog" aria-modal="true" aria-labelledby="editScheduleTitle">
       <button id="editModalCloseBtn" class="modalClose smallBtn" aria-label="Close">✕</button>
-      <h3 id="editScheduleTitle">Edit Student Schedule</h3>
+      <h3 id="editScheduleTitle">Review Student Schedule</h3>
       <div id="editScheduleInfo" class="infoBlock" style="margin-bottom:8px;"></div>
+      
+      <!-- Review status indicator -->
+      <div id="reviewStatusIndicator" class="infoBlock" style="margin-bottom:12px; padding:8px; border-radius:8px;"></div>
 
       <div style="display:flex;gap:12px;flex-wrap:wrap;">
         <div style="flex:1 1 320px;">
@@ -162,8 +165,16 @@
 
       <div class="row wrap" style="margin-top:12px;">
         <button id="saveCounselorScheduleBtn">Save</button>
+        <button id="signOffScheduleBtn" class="success">Sign Off</button>
         <button id="resetScheduleBtn" class="danger">Reset Schedule</button>
         <div id="editScheduleMsg" class="msg" style="margin-left:12px;"></div>
+      </div>
+      
+      <!-- Navigation buttons -->
+      <div class="row wrap" style="margin-top:12px; border-top:1px solid var(--line); padding-top:12px;">
+        <button id="previousStudentBtn" class="smallBtn">← Previous Student</button>
+        <button id="nextStudentBtn" class="smallBtn">Next Student →</button>
+        <div id="navigationMsg" class="msg" style="margin-left:12px;"></div>
       </div>
     </div>
   </div>
