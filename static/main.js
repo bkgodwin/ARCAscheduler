@@ -734,10 +734,11 @@
     counselorHasUnsavedChanges = (currentState !== counselorOriginalScheduleState);
     
     // Highlight the modal if there are unsaved changes
-    if (counselorHasUnsavedChanges && editScheduleModal) {
-      editScheduleModal.querySelector(".modalInner").style.boxShadow = "0 0 0 3px rgba(250,204,21,0.3)";
-    } else if (editScheduleModal) {
-      editScheduleModal.querySelector(".modalInner").style.boxShadow = "";
+    if (editScheduleModal) {
+      const modalInner = editScheduleModal.querySelector(".modalInner");
+      if (modalInner) {
+        modalInner.style.boxShadow = counselorHasUnsavedChanges ? "0 0 0 3px rgba(250,204,21,0.3)" : "";
+      }
     }
   }
 

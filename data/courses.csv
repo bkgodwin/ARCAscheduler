@@ -1,0 +1,6 @@
+course_code,course_name,subject_area,level,description,teacher_name,teacher_email,room,grade_min,grade_max,requires_approval
+ENG9,English I,ELA,Regular,"Foundational reading, writing, discussion.",Mr. White,white@school.org,A203,9,9,FALSE
+ALG1,Algebra I,Math,Regular,"Linear equations, functions, algebra basics.",Ms. Carter,carter@school.org,B102,9,10,FALSE
+BIO,Biology,Science,Honors,"Cells, genetics, ecology, lab investigations.",Dr. Singh,singh@school.org,Lab201,9,10,TRUE
+PE9,Health & PE I,PE/Health,Regular,"Personal fitness, health, wellness, team sports.",Coach Reed,reed@school.org,Gym,9,10,FALSE
+WELD1,Intro Welding,CTE,CTE,"Shop safety, MIG basics, metal prep.",Mr. Gomez,gomez@school.org,Shop1,9,12,TRUE
