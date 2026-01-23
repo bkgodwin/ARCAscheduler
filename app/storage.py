@@ -148,6 +148,7 @@ def ensure_dirs_and_files():
             for j in range(MAX_ELECTIVE_CHOICES):
                 header.append(f"elective_{j+1}")
             header.append("special_instructions")
+            header.append("reviewed")
             w = csv.writer(f)
             w.writerow(header)
 
@@ -300,6 +301,7 @@ def read_schedules():
                 "academic_courses": [],
                 "elective_courses": [],
                 "special_instructions": (row.get("special_instructions", "") or "").strip(),
+                "reviewed": _boolish(row.get("reviewed", "FALSE")),
             }
             for i in range(MAX_ACADEMIC_COURSES):
                 v = (row.get(f"period_{i+1}", "") or "").strip()
@@ -320,6 +322,7 @@ def write_schedules(sched_list):
     for j in range(MAX_ELECTIVE_CHOICES):
         header.append(f"elective_{j+1}")
     header.append("special_instructions")
+    header.append("reviewed")
 
     with open(SCHEDULES_CSV, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=header)
@@ -330,6 +333,7 @@ def write_schedules(sched_list):
                 "student_name": row["student_name"],
                 "grade_level": row["grade_level"],
                 "special_instructions": row.get("special_instructions", ""),
+                "reviewed": "TRUE" if _boolish(row.get("reviewed", False)) else "FALSE",
             }
             for i in range(MAX_ACADEMIC_COURSES):
                 flat[f"period_{i+1}"] = row["academic_courses"][i] if i < len(row["academic_courses"]) else ""

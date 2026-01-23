@@ -30,6 +30,10 @@ from app.logic import (
     extract_course_code,
     ensure_approval_rows_for_schedule,
     course_by_code_map,
+    mark_schedule_reviewed,
+    get_student_list_with_filters,
+    get_next_student_id,
+    get_previous_student_id,
 )
 
 bp_counselor = Blueprint("counselor", __name__)
@@ -284,6 +288,7 @@ def counselor_students():
 
         top_elective = elective[0] if elective else ""
         saved = bool(sched)
+        reviewed = sched.get("reviewed", False) if sched else False
 
         pending_cnt = 0
         rejected_cnt = 0
@@ -298,6 +303,7 @@ def counselor_students():
                 "academic_courses": academic,
                 "top_elective": top_elective,
                 "scheduled": saved,
+                "reviewed": reviewed,
                 "pending_approvals": pending_cnt,
                 "rejected_approvals": rejected_cnt,
                 "special_instructions": notes,
@@ -382,6 +388,7 @@ def counselor_get_schedule():
             "academic_courses": [],
             "elective_courses": [],
             "special_instructions": "",
+            "reviewed": False,
         }
 
     selected_codes = [extract_course_code(x) for x in sched["academic_courses"]] + [
@@ -453,3 +460,67 @@ def counselor_delete_student():
 
     delete_student_record(sid)
     return jsonify({"ok": True})
+
+
+@bp_counselor.post("/api/counselor/sign_off_schedule")
+def counselor_sign_off_schedule():
+    if not is_counselor():
+        return jsonify({"error": "not_authorized"}), 403
+
+    data = request.json or {}
+    sid = (data.get("student_id", "") or "").strip()
+    if not sid:
+        return jsonify({"error": "missing_id"}), 400
+
+    # Mark the schedule as reviewed
+    mark_schedule_reviewed(sid, True)
+
+    return jsonify({"ok": True})
+
+
+@bp_counselor.post("/api/counselor/get_next_student")
+def counselor_get_next_student():
+    if not is_counselor():
+        return jsonify({"error": "not_authorized"}), 403
+
+    data = request.json or {}
+    current_id = (data.get("student_id", "") or "").strip()
+    q_name = (data.get("q_name", "") or "").strip()
+    q_grade = (data.get("q_grade", "") or "").strip()
+    q_course = (data.get("q_course", "") or "").strip()
+
+    if not current_id:
+        return jsonify({"error": "missing_id"}), 400
+
+    # Get filtered student list
+    student_list = get_student_list_with_filters(q_name, q_grade, q_course)
+    next_id = get_next_student_id(current_id, student_list)
+
+    if next_id:
+        return jsonify({"ok": True, "next_student_id": next_id})
+    else:
+        return jsonify({"ok": False, "message": "No next student"})
+
+
+@bp_counselor.post("/api/counselor/get_previous_student")
+def counselor_get_previous_student():
+    if not is_counselor():
+        return jsonify({"error": "not_authorized"}), 403
+
+    data = request.json or {}
+    current_id = (data.get("student_id", "") or "").strip()
+    q_name = (data.get("q_name", "") or "").strip()
+    q_grade = (data.get("q_grade", "") or "").strip()
+    q_course = (data.get("q_course", "") or "").strip()
+
+    if not current_id:
+        return jsonify({"error": "missing_id"}), 400
+
+    # Get filtered student list
+    student_list = get_student_list_with_filters(q_name, q_grade, q_course)
+    prev_id = get_previous_student_id(current_id, student_list)
+
+    if prev_id:
+        return jsonify({"ok": True, "previous_student_id": prev_id})
+    else:
+        return jsonify({"ok": False, "message": "No previous student"})
